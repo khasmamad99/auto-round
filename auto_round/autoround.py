@@ -93,6 +93,7 @@ class AutoRound(object):
         sampler (str): The sampling method (default is "rand").
         seed (int): The random seed (default is 42).
         nblocks (int): Number of blocks (default is 1).
+        num_lookahead_blocks (int): Number of lookahead blocks (default is 0).
         gradient_accumulate_steps (int): Number of gradient accumulation steps (default is 1).
         not_use_best_mse (bool): Whether to use mean squared error (default is False).
         dynamic_max_gap (int): The dynamic maximum gap (default is -1).
@@ -135,6 +136,7 @@ class AutoRound(object):
             sampler: str = "rand",
             seed: int = 42,
             nblocks: int = 1,
+            num_lookahead_blocks: int = 0,
             gradient_accumulate_steps: int = 1,
             not_use_best_mse: bool = False,
             dynamic_max_gap: int = -1,
@@ -157,6 +159,7 @@ class AutoRound(object):
         self.enable_minmax_tuning = enable_minmax_tuning
         self.nsamples = nsamples
         self.nblocks = nblocks
+        self.num_lookahead_blocks = num_lookahead_blocks
         self.bits = bits
         self.group_size = group_size
         self.sym = sym
@@ -267,6 +270,7 @@ class AutoRound(object):
             inputs,
             block_names,
             nblocks=self.nblocks,
+            num_lookahead_blocks=self.num_lookahead_blocks,
             device=self.device,
         )
 
@@ -980,8 +984,7 @@ class AutoRound(object):
 
     def quant_block_with_lookahaed(
         self, 
-        block, 
-        lookahead_multi_block: WrapperMultiblock,
+        block: WrapperMultiblock, 
         input_ids, 
         input_others, 
         q_input=None, 
@@ -999,28 +1002,34 @@ class AutoRound(object):
         Returns:
         Tuple: (q_outputs, output) if self.enable_quanted_input is True, else (None, output)
         """
+        quantizable_block, lookahaed_block = block.layers
+        quantizable_block_outputs = self.get_block_outputs(
+            quantizable_block, 
+            input_ids, 
+            input_others, 
+            self.train_bs * self.infer_bs_coeff, 
+            device, 
+            self.cache_device
+        )
 
-        quant_block_output = self.get_block_outputs(block, input_ids, input_others, self.train_bs * self.infer_bs_coeff, device,
-                                        self.cache_device)
-        
         output = self.get_block_outputs(
-            block=lookahead_multi_block, 
-            input_ids=quant_block_output, 
-            input_others=input_others, 
-            bs=self.train_bs * self.infer_bs_coeff, 
-            device=device,
-            cache_device=self.cache_device,
+            block, 
+            input_ids, 
+            input_others, 
+            self.train_bs * self.infer_bs_coeff, 
+            device,
+            self.cache_device
         )
 
         if q_input is not None:
             input_ids = q_input
 
         quantized_layer_names, unquantized_layer_names = wrapper_block(
-            block, self.enable_minmax_tuning, device=self.device)
+            quantizable_block, self.enable_minmax_tuning, device=self.device)
 
         round_params = []
         minmax_params = []
-        for n, m in block.named_modules():
+        for n, m in quantizable_block.named_modules():
             if hasattr(m, "orig_layer"):
                 round_params.append(m.value)
                 minmax_params.append(m.min_scale)
@@ -1039,7 +1048,7 @@ class AutoRound(object):
                 f"layers in the block"
             )
             logger.info(dump_info)
-            return quant_block_output, quant_block_output
+            return quantizable_block_outputs, quantizable_block_outputs
 
         if self.lr_scheduler is None:
             lr_schedule = torch.optim.lr_scheduler.LinearLR(
@@ -1082,10 +1091,6 @@ class AutoRound(object):
                 output_q = block_forward(
                     block, current_input_ids, current_input_others, self.amp, self.amp_dtype, device
                 )
-                # output_q = list(torch.split(output_q, 1, dim=self.input_dim))
-                output_q = block_forward(
-                    lookahead_multi_block, output_q, current_input_others, self.amp, self.amp_dtype, device
-                )
                 
                 if self.amp:
                     with autocast(device_type=device.split(":")[0], dtype=self.amp_dtype):
@@ -1104,12 +1109,12 @@ class AutoRound(object):
                 best_loss = total_loss
                 if not self.not_use_best_mse:
                     # print(f"get better result at iter {i}, the loss is {total_loss}", flush=True)
-                    best_v = collect_round_v(block)
-                    best_min_scale, best_max_scale = collect_minmax_scale(block)
+                    best_v = collect_round_v(quantizable_block)
+                    best_min_scale, best_max_scale = collect_minmax_scale(quantizable_block)
                     last_best_iter = i
             if self.not_use_best_mse and i == self.iters - 1:
-                best_v = collect_round_v(block)
-                best_min_scale, best_max_scale = collect_minmax_scale(block)
+                best_v = collect_round_v(quantizable_block)
+                best_min_scale, best_max_scale = collect_minmax_scale(quantizable_block)
 
             if not self.not_use_best_mse:
                 if self.dynamic_max_gap > 0 and i - last_best_iter >= self.dynamic_max_gap:
@@ -1129,25 +1134,25 @@ class AutoRound(object):
         if len(unquantized_layer_names) != 0:
             logger.info(f"{unquantized_layer_names} have not been quantized")
         with torch.no_grad():
-            unwrapper_block(block, best_v, best_min_scale, best_max_scale)
+            unwrapper_block(quantizable_block, best_v, best_min_scale, best_max_scale)
         if self.enable_quanted_input:
-            block = block.to(device)
+            quantizable_block = quantizable_block.to(device)
             q_outputs = self.get_block_outputs(
-                block, input_ids, input_others, self.train_bs * self.infer_bs_coeff, device,
+                quantizable_block, input_ids, input_others, self.train_bs * self.infer_bs_coeff, device,
                 cache_device=self.cache_device
             )
-            block = mv_module_from_gpu(block, self.low_cpu_mem_usage)
+            quantizable_block = mv_module_from_gpu(quantizable_block, self.low_cpu_mem_usage)
             for i in range(len(input_ids)):
                 input_ids[i] = None
             torch.cuda.empty_cache()
 
-            return q_outputs, quant_block_output
+            return q_outputs, quantizable_block_outputs
 
         else:
             for i in range(len(input_ids)):
                 input_ids[i] = None
             torch.cuda.empty_cache()
-            return None, quant_block_output
+            return None, quantizable_block_outputs
 
 
     def quant_blocks(
@@ -1156,7 +1161,7 @@ class AutoRound(object):
             inputs,
             block_names,
             nblocks=1,
-            num_lookahead_blocks: int = 1,
+            num_lookahead_blocks: int = 0,
             device=torch.device("cpu"),
     ):
         """Quantize and dequantize the weights of the specified blocks in the model.
@@ -1210,14 +1215,19 @@ class AutoRound(object):
                 lookahead_multi_block = WrapperMultiblock(
                     [get_module(model, lookahead_block_name) for lookahead_block_name in lookahead_block_names]
                 )
-            else:
-                lookahead_multi_block = None
+                m = WrapperMultiblock([m, lookahead_multi_block])
 
             m = m.to(device)
-            if lookahead_multi_block is not None:
-                lookahead_multi_block = lookahead_multi_block.to(device)
 
-            if lookahead_multi_block is None:
+            if num_lookahead_blocks > 0:
+                q_input, input_ids = self.quant_block_with_lookahaed(
+                    m,
+                    input_ids,
+                    input_others,
+                    q_input=q_input,
+                    device=device,
+                )
+            else:
                 q_input, input_ids = self.quant_block(
                     m,
                     input_ids,
@@ -1225,15 +1235,7 @@ class AutoRound(object):
                     q_input=q_input,
                     device=device,
                 )
-            else:
-                q_input, input_ids = self.quant_block_with_lookahaed(
-                    m,
-                    lookahead_multi_block,
-                    input_ids,
-                    input_others,
-                    q_input=q_input,
-                    device=device,
-                )
+
             self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
             torch.cuda.empty_cache()
 
