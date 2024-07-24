@@ -13,10 +13,16 @@ torch.use_deterministic_algorithms(True, warn_only=True)
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoModel
 
 from transformers import set_seed
+import wandb
 
 import re
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+WANDB_PROJECT_NAME = "khas/thesis/autoround"
+WANDB_ENTITY = "recogni"
+
+
 
 if __name__ == '__main__':
 
@@ -136,6 +142,7 @@ if __name__ == '__main__':
     parser.add_argument("--act_bits", default=32, type=int,
                         help="activation bits")
     parser.add_argument("--use_best_mse", action='store_true', default=False)
+    parser.add_argument("--disable_wandb", action='store_true', default=False)
 
     args = parser.parse_args()
 
@@ -297,6 +304,17 @@ if __name__ == '__main__':
         print(f"warning, low_gpu_mem_usage=False is strongly recommended if the whole model could be loaded to "
               f"gpu")
 
+    if not args.disable_wandb:
+        run_name = f"{model_name.split('/')[-1]}-w{args.bits}g{args.group_size}-blcks={args.nblocks}-lkhd_blcks={args.num_lookahead_blocks}"
+        
+        run = wandb.init(
+            config=args.vars(),
+            project=WANDB_PROJECT_NAME,
+            entity=WANDB_ENTITY,
+            name=run_name,
+        )
+        
+    
     autoround = round(model, tokenizer, args.bits, args.group_size, sym=args.sym, batch_size=args.train_bs,
                       dataset=args.dataset, seqlen=seqlen, 
                       nblocks=args.nblocks, num_lookahead_blocks=args.num_lookahead_blocks, 
@@ -421,6 +439,9 @@ if __name__ == '__main__':
                               tasks=tasks,
                               batch_size=args.eval_bs, user_model=user_model)
         from lm_eval.utils import make_table
+        
+        if not args.disable_wandb:
+            wandb.log(res)
 
         print(make_table(res))
-
+        
