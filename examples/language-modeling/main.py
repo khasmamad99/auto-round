@@ -135,6 +135,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--act_bits", default=32, type=int,
                         help="activation bits")
+    parser.add_argument("--use_best_mse", action='store_true', default=False)
 
     args = parser.parse_args()
 
@@ -306,7 +307,9 @@ if __name__ == '__main__':
                       seed=args.seed, gradient_accumulate_steps=args.gradient_accumulate_steps,
                       scale_dtype=args.scale_dtype, layer_config=layer_config,
                       enable_minmax_tuning=not args.disable_minmax_tuning, act_bits=args.act_bits,
-                      low_cpu_mem_usage=low_cpu_mem_usage, data_type=args.data_type)
+                      low_cpu_mem_usage=low_cpu_mem_usage, data_type=args.data_type,
+                      not_use_best_mse=not args.use_best_mse,
+                      )
     model, _ = autoround.quantize()
     model_name = args.model_name.rstrip("/")
     if args.low_cpu_mem_mode == 1 or args.low_cpu_mem_mode == 2:
