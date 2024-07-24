@@ -1209,37 +1209,28 @@ class AutoRound(object):
             if nblocks == 1:
                 n = block_names[i]
                 logger.info(f"quantizing {i + 1}/{len(block_names)}, {n}")
-                m = get_module(model, n)
+                qauntizable_block = get_module(model, n)
             else:
                 names = block_names[i: i + nblocks]
                 logger.info(names)
                 modules = [get_module(model, n) for n in names]
-                m = WrapperMultiblock(modules)
-            if num_lookahead_blocks > 0:
-                lookahead_block_names = block_names[i + 1: i + 1 + num_lookahead_blocks]
-                lookahead_multi_block = WrapperMultiblock(
-                    [get_module(model, lookahead_block_name) for lookahead_block_name in lookahead_block_names]
-                )
-                m = WrapperMultiblock([m, lookahead_multi_block])
+                qauntizable_block = WrapperMultiblock(modules)
+                
+            lookahead_block_names = block_names[i + 1: i + 1 + num_lookahead_blocks]
+            lookahead_multi_block = WrapperMultiblock(
+                [get_module(model, lookahead_block_name) for lookahead_block_name in lookahead_block_names]
+            )
+            m = WrapperMultiblock([qauntizable_block, lookahead_multi_block])
 
             m = m.to(device)
 
-            if num_lookahead_blocks > 0:
-                q_input, input_ids = self.quant_block_with_lookahaed(
-                    m,
-                    input_ids,
-                    input_others,
-                    q_input=q_input,
-                    device=device,
-                )
-            else:
-                q_input, input_ids = self.quant_block(
-                    m,
-                    input_ids,
-                    input_others,
-                    q_input=q_input,
-                    device=device,
-                )
+            q_input, input_ids = self.quant_block_with_lookahaed(
+                m,
+                input_ids,
+                input_others,
+                q_input=q_input,
+                device=device,
+            )
 
             self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
             torch.cuda.empty_cache()
