@@ -21,6 +21,8 @@ import torch
 import transformers
 from torch import autocast
 
+import wandb
+
 from .calib_dataset import get_dataloader
 from .quantizer import WrapperMultiblock, wrapper_block, unwrapper_block, WrapperLinear, unwrapper_layer
 from .special_model_handler import check_hidden_state_dim, check_share_attention_mask, check_not_share_position_ids
@@ -147,6 +149,7 @@ class AutoRound(object):
             act_group_size: int = None,
             act_sym: bool = None,
             act_dynamic: bool = True,
+            disable_wandb: bool = False,
             **kwargs,
     ):
         self.quantized = False
@@ -200,6 +203,8 @@ class AutoRound(object):
         self.act_bits = act_bits if not (act_bits is None) else self.bits
         self.act_sym = act_sym if not (act_sym is None) else self.sym
         self.act_dynamic = act_dynamic
+        self.disable_wandb = disable_wandb
+        
         self.set_layerwise_config(self.layer_config)
         torch.set_printoptions(precision=3, sci_mode=True)
         self.check_configs()
