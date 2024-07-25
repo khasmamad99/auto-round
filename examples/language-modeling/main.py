@@ -145,6 +145,10 @@ if __name__ == '__main__':
     parser.add_argument("--use_best_mse", action='store_true', default=False)
     parser.add_argument("--disable_wandb", action='store_true', default=False)
     parser.add_argument("--wandb_offline", action='store_true', default=False)
+    parser.add_argument("--lm_eval_random_seed", default=0, type=int)
+    parser.add_argument("--lm_eval_numpy_random_seed", default=1234, type=int)
+    parser.add_argument("--lm_eval_torch_random_seed", default=1234, type=int)
+    
 
     args = parser.parse_args()
 
@@ -442,11 +446,28 @@ if __name__ == '__main__':
 
         res = simple_evaluate(model="hf", model_args=model_args,
                               tasks=tasks,
-                              batch_size=args.eval_bs, user_model=user_model)
+                              batch_size=args.eval_bs, user_model=user_model,
+                              random_seed=args.lm_eval_random_seed,
+                              numpy_random_seed=args.lm_eval_numpy_random_seed,
+                              torch_random_seed=args.lm_eval_torch_random_seed,
+                            )
         from lm_eval.utils import make_table
         
         if not args.disable_wandb:
-            wandb.log(res)
+            from eval_042.utils import make_pandas_dataframe_from_lm_eval_results
+            results_df = make_pandas_dataframe_from_lm_eval_results(res)
+            wandb_table = wandb.Table(dataframe=results_df)
+            wandb.log({f"lm_eval_{lm_eval_version.replace('.','')}_results": wandb_table})
+            
+            res["configs"]["random_seed"] = args.lm_eval_random_seed
+            res["configs"]["numpy_random_seed"] = args.lm_eval_numpy_random_seed
+            res["configs"]["torch_random_seed"] = args.lm_eval_torch_random_seed
+            
+            run.config.update({
+                "lm_eval_version": lm_eval_version,
+                f"lm_eval_configs": res["configs"],
+            })
+            
 
         print(make_table(res))
         
