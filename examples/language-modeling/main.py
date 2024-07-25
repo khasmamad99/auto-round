@@ -456,6 +456,11 @@ if __name__ == '__main__':
         if not args.disable_wandb:
             from eval_042.utils import make_pandas_dataframe_from_lm_eval_results
             results_df = make_pandas_dataframe_from_lm_eval_results(res)
+            
+            results_df.insert(0, "run_name", run_name)
+            results_df.insert(5, "num_blocks", args.nblocks)
+            results_df.insert(6, "num_lookahead_blocks", args.num_lookahead_blocks)
+            
             wandb_table = wandb.Table(dataframe=results_df)
             wandb.log({f"lm_eval_{lm_eval_version.replace('.','')}_results": wandb_table})
             
