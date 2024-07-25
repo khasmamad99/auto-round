@@ -19,8 +19,9 @@ import re
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-WANDB_PROJECT_NAME = "khas/thesis/autoround"
+WANDB_PROJECT_NAME = "khas-thesis-autoround"
 WANDB_ENTITY = "recogni"
+WANDB_LOG_DIR = "/home/khasmamad/"
 
 
 
@@ -143,6 +144,7 @@ if __name__ == '__main__':
                         help="activation bits")
     parser.add_argument("--use_best_mse", action='store_true', default=False)
     parser.add_argument("--disable_wandb", action='store_true', default=False)
+    parser.add_argument("--wandb_offline", action='store_true', default=False)
 
     args = parser.parse_args()
 
@@ -308,10 +310,12 @@ if __name__ == '__main__':
         run_name = f"{model_name.split('/')[-1]}-w{args.bits}g{args.group_size}-blcks={args.nblocks}-lkhd_blcks={args.num_lookahead_blocks}"
         
         run = wandb.init(
-            config=args.vars(),
+            config=vars(args),
             project=WANDB_PROJECT_NAME,
             entity=WANDB_ENTITY,
             name=run_name,
+            mode="offline" if args.wandb_offline else "online",
+            dir=WANDB_LOG_DIR,
         )
         
     
@@ -327,6 +331,7 @@ if __name__ == '__main__':
                       enable_minmax_tuning=not args.disable_minmax_tuning, act_bits=args.act_bits,
                       low_cpu_mem_usage=low_cpu_mem_usage, data_type=args.data_type,
                       not_use_best_mse=not args.use_best_mse,
+                      disable_wandb=args.disable_wandb,
                       )
     model, _ = autoround.quantize()
     model_name = args.model_name.rstrip("/")
