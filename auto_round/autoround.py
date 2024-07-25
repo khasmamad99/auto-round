@@ -995,7 +995,8 @@ class AutoRound(object):
         input_others, 
         q_input=None, 
         device=torch.device("cpu"),
-        block_name: str = "unk_layer"
+        quantizable_block_name: str = "unk_layer",
+        output_block_name: str = "unk_layer",
     ):
         """Quantize the weights of a given block of the model.
 
@@ -1075,9 +1076,13 @@ class AutoRound(object):
         init_loss = None
         best_v, best_min_scale, best_max_scale = torch.tensor(0), torch.tensor(1.0), torch.tensor(1.0)
         
-        wandb.define_metric(f"iter_count/{block_name}")
-        wandb.define_metric(f"loss/{block_name}", step_metric=f"iter_count/{block_name}")
-        wandb.define_metric(f"lr/{block_name}", step_metric=f"iter_count/{block_name}")
+        wandb.define_metric(f"iter_count_quant_block/{quantizable_block_name}")
+        wandb.define_metric(f"loss_quant_block/{quantizable_block_name}", step_metric=f"iter_count_quant_block/{quantizable_block_name}")
+        wandb.define_metric(f"lr_quant_block/{quantizable_block_name}", step_metric=f"iter_count_quant_block/{quantizable_block_name}")
+        
+        wandb.define_metric(f"iter_count_out_block/{output_block_name}")
+        wandb.define_metric(f"loss_out_block/{output_block_name}", step_metric=f"iter_count_out_block/{output_block_name}")
+        wandb.define_metric(f"lr_out_block/{output_block_name}", step_metric=f"iter_count_out_block/{output_block_name}")
         
         for i in range(self.iters):
             total_loss = 0
@@ -1135,9 +1140,12 @@ class AutoRound(object):
             if not self.disable_wandb:
                 wandb.log(
                     data={
-                        f"iter_count/{block_name}": i,
-                        f"loss/{block_name}": total_loss,
-                        f"lr/{block_name}": lr_schedule.get_last_lr()[0],
+                        f"iter_count_quant_block/{quantizable_block_name}": i,
+                        f"loss_quant_block/{quantizable_block_name}": total_loss,
+                        f"lr_quant_block/{quantizable_block_name}": lr_schedule.get_last_lr()[0],
+                        f"iter_count_out_block/{output_block_name}": i,
+                        f"loss_out_block/{output_block_name}": total_loss,
+                        f"lr_out_block/{output_block_name}": lr_schedule.get_last_lr()[0],
                     }, 
                 )
 
@@ -1240,14 +1248,15 @@ class AutoRound(object):
 
             m = m.to(device)
 
-            
+            output_block_name = block_names[min(i + num_lookahead_blocks, len(block_names) - 1)]
             q_input, input_ids = self.quant_block_with_lookahaed(
                 m,
                 input_ids,
                 input_others,
                 q_input=q_input,
                 device=device,
-                block_name=format_layer_name(n),
+                quantizable_block_name=format_layer_name(n),
+                output_block_name=format_layer_name(output_block_name),
             )
 
             self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
