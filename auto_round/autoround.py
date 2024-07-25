@@ -993,7 +993,8 @@ class AutoRound(object):
         input_ids, 
         input_others, 
         q_input=None, 
-        device=torch.device("cpu")
+        device=torch.device("cpu"),
+        block_name: str = "unk_layer"
     ):
         """Quantize the weights of a given block of the model.
 
@@ -1072,6 +1073,11 @@ class AutoRound(object):
         scaler = self.get_scaler()  # pylint: disable=assignment-from-none
         init_loss = None
         best_v, best_min_scale, best_max_scale = torch.tensor(0), torch.tensor(1.0), torch.tensor(1.0)
+        
+        wandb.define_metric(f"iter_count/{block_name}")
+        wandb.define_metric(f"loss/{block_name}", step_metric=f"iter_count/{block_name}")
+        wandb.define_metric(f"lr/{block_name}", step_metric=f"iter_count/{block_name}")
+        
         for i in range(self.iters):
             total_loss = 0
             if self.sampler == "rand":
@@ -1125,6 +1131,14 @@ class AutoRound(object):
                 if self.dynamic_max_gap > 0 and i - last_best_iter >= self.dynamic_max_gap:
                     break
             self.step(scaler, optimizer, lr_schedule)
+            if not self.disable_wandb:
+                wandb.log(
+                    data={
+                        f"iter_count/{block_name}": i,
+                        f"loss/{block_name}": total_loss,
+                        f"lr/{block_name}": lr_schedule.get_last_lr()[0],
+                    }, 
+                )
 
         last_loss = total_loss
         best_iter = self.iters
@@ -1211,9 +1225,10 @@ class AutoRound(object):
                 logger.info(f"quantizing {i + 1}/{len(block_names)}, {n}")
                 qauntizable_block = get_module(model, n)
             else:
-                names = block_names[i: i + nblocks]
-                logger.info(names)
-                modules = [get_module(model, n) for n in names]
+                quantizable_block_names = block_names[i: i + nblocks]
+                n = "&".join(quantizable_block_names)
+                logger.info(quantizable_block_names)
+                modules = [get_module(model, n) for n in quantizable_block_names]
                 qauntizable_block = WrapperMultiblock(modules)
                 
             lookahead_block_names = block_names[i + 1: i + 1 + num_lookahead_blocks]
@@ -1230,6 +1245,7 @@ class AutoRound(object):
                 input_others,
                 q_input=q_input,
                 device=device,
+                block_name=n,
             )
 
             self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
