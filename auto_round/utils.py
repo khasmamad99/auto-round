@@ -742,3 +742,15 @@ def dynamic_import_inference_linear(backend, bits, group_size, sym):
     return QuantLinear
 
 
+def format_layer_name(layer_name):
+    """Formats the layer name to include a three-digit index to ensure proper sorting on wandb UI."""
+    # Split the string to separate the base and the number
+    parts = layer_name.rsplit('.', 1)
+    base = parts[0]
+    index = parts[1]
+
+    # Format the index with leading zeros to make it always three digits
+    formatted_index = f"{int(index):03d}"
+
+    # Combine the base with the formatted index
+    return f"{base}.{formatted_index}"

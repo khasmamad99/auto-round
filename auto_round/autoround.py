@@ -45,6 +45,7 @@ from .utils import (
     to_dtype,
     get_layer_names_in_block,
     mv_module_from_gpu,
+    format_layer_name,
 )
 
 from .low_cpu_mem.utils import get_layers_before_block
@@ -1239,13 +1240,14 @@ class AutoRound(object):
 
             m = m.to(device)
 
+            
             q_input, input_ids = self.quant_block_with_lookahaed(
                 m,
                 input_ids,
                 input_others,
                 q_input=q_input,
                 device=device,
-                block_name=n,
+                block_name=format_layer_name(n),
             )
 
             self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
