@@ -1076,13 +1076,26 @@ class AutoRound(object):
         init_loss = None
         best_v, best_min_scale, best_max_scale = torch.tensor(0), torch.tensor(1.0), torch.tensor(1.0)
         
-        wandb.define_metric(f"iter_count_quant_block/{quantizable_block_name}")
-        wandb.define_metric(f"loss_quant_block/{quantizable_block_name}", step_metric=f"iter_count_quant_block/{quantizable_block_name}")
-        wandb.define_metric(f"lr_quant_block/{quantizable_block_name}", step_metric=f"iter_count_quant_block/{quantizable_block_name}")
-        
-        wandb.define_metric(f"iter_count_out_block/{output_block_name}")
-        wandb.define_metric(f"loss_out_block/{output_block_name}", step_metric=f"iter_count_out_block/{output_block_name}")
-        wandb.define_metric(f"lr_out_block/{output_block_name}", step_metric=f"iter_count_out_block/{output_block_name}")
+        if not self.disable_wandb:
+            wandb.define_metric(f"iter_count_quant_block/{quantizable_block_name}->")
+            wandb.define_metric(
+                f"loss_quant_block/{quantizable_block_name}->{output_block_name}", 
+                step_metric=f"iter_count_quant_block/{quantizable_block_name}->"
+            )
+            wandb.define_metric(
+                f"lr_quant_block/{quantizable_block_name}->{output_block_name}", 
+                step_metric=f"iter_count_quant_block/{quantizable_block_name}->"
+            )
+            
+            wandb.define_metric(f"iter_count_out_block/{output_block_name}<-")
+            wandb.define_metric(
+                f"loss_out_block/{output_block_name}<-{quantizable_block_name}", 
+                step_metric=f"iter_count_out_block/{output_block_name}<-"
+            )
+            wandb.define_metric(
+                f"lr_out_block/{output_block_name}<-{quantizable_block_name}", 
+                step_metric=f"iter_count_out_block/{output_block_name}<-"
+            )
         
         for i in range(self.iters):
             total_loss = 0
@@ -1140,12 +1153,12 @@ class AutoRound(object):
             if not self.disable_wandb:
                 wandb.log(
                     data={
-                        f"iter_count_quant_block/{quantizable_block_name}": i,
-                        f"loss_quant_block/{quantizable_block_name}": total_loss,
-                        f"lr_quant_block/{quantizable_block_name}": lr_schedule.get_last_lr()[0],
-                        f"iter_count_out_block/{output_block_name}": i,
-                        f"loss_out_block/{output_block_name}": total_loss,
-                        f"lr_out_block/{output_block_name}": lr_schedule.get_last_lr()[0],
+                        f"iter_count_quant_block/{quantizable_block_name}->": i,
+                        f"loss_quant_block/{quantizable_block_name}->{output_block_name}": total_loss,
+                        f"lr_quant_block/{quantizable_block_name}->{output_block_name}": lr_schedule.get_last_lr()[0],
+                        f"iter_count_out_block/{output_block_name}<-": i,
+                        f"loss_out_block/{output_block_name}<-{quantizable_block_name}": total_loss,
+                        f"lr_out_block/{output_block_name}<-{quantizable_block_name}": lr_schedule.get_last_lr()[0],
                     }, 
                 )
 
