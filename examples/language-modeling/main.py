@@ -82,6 +82,10 @@ if __name__ == '__main__':
     parser.add_argument("--nblocks", default=1, type=int, help="num of blocks to tune together")
     parser.add_argument("--num_lookahead_blocks", default=0, type=int, help="num of blocks to look ahead")
     parser.add_argument("--num_observe_blocks", default=0, type=int, help="num of blocks to observe")
+    
+    parser.add_argument("--isolation_experiment_v2", action='store_true', help="isolation experiment v2")
+    parser.add_argument("--fine_tune_block_idx", default=0, type=int, help="fine tune block idx")
+    parser.add_argument("--observe_block_idx", default=0, type=int, help="observe block idx")
 
     parser.add_argument("--nsamples", default=128, type=int,
                         help="number of samples")
@@ -327,6 +331,7 @@ if __name__ == '__main__':
     autoround = round(model, tokenizer, args.bits, args.group_size, sym=args.sym, batch_size=args.train_bs,
                       dataset=args.dataset, seqlen=seqlen, 
                       nblocks=args.nblocks, num_lookahead_blocks=args.num_lookahead_blocks, num_observe_blocks=args.num_observe_blocks,
+                      isolation_experiment_v2=args.isolation_experiment_v2, fine_tune_block_idx=args.fine_tune_block_idx, observe_block_idx=args.observe_block_idx,
                       iters=args.iters, lr=args.lr,
                       minmax_lr=args.minmax_lr, enable_quanted_input=not args.disable_quanted_input, device=device_str,
                       amp=not args.disable_amp, nsamples=args.nsamples,
