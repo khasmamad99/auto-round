@@ -992,7 +992,7 @@ class AutoRound(object):
             return None, output
         
 
-    def quant_block_with_lookahaed(
+    def quant_block_with_lookahead(
         self, 
         combined_block: WrapperMultiblock, 
         input_ids, 
@@ -1313,7 +1313,7 @@ class AutoRound(object):
             combined_block = combined_block.to(device)
 
             output_block_name = block_names[min(i + num_lookahead_blocks, len(block_names) - 1)]
-            q_input, input_ids = self.quant_block_with_lookahaed(
+            q_input, input_ids = self.quant_block_with_lookahead(
                 combined_block,
                 input_ids,
                 input_others,
