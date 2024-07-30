@@ -81,6 +81,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--nblocks", default=1, type=int, help="num of blocks to tune together")
     parser.add_argument("--num_lookahead_blocks", default=0, type=int, help="num of blocks to look ahead")
+    parser.add_argument("--num_observe_blocks", default=0, type=int, help="num of blocks to observe")
 
     parser.add_argument("--nsamples", default=128, type=int,
                         help="number of samples")
@@ -325,7 +326,7 @@ if __name__ == '__main__':
     
     autoround = round(model, tokenizer, args.bits, args.group_size, sym=args.sym, batch_size=args.train_bs,
                       dataset=args.dataset, seqlen=seqlen, 
-                      nblocks=args.nblocks, num_lookahead_blocks=args.num_lookahead_blocks, 
+                      nblocks=args.nblocks, num_lookahead_blocks=args.num_lookahead_blocks, num_observe_blocks=args.num_observe_blocks,
                       iters=args.iters, lr=args.lr,
                       minmax_lr=args.minmax_lr, enable_quanted_input=not args.disable_quanted_input, device=device_str,
                       amp=not args.disable_amp, nsamples=args.nsamples,
