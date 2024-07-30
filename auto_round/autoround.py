@@ -1293,13 +1293,17 @@ class AutoRound(object):
                 [get_module(model, fine_tune_block_name) for fine_tune_block_name in fine_tune_block_names]
             )
             
-            lookahead_block_names = block_names[i + 1: i + 1 + num_lookahead_blocks]
+            lookahead_block_start_idx = i + nblocks
+            lookahead_block_end_idx = lookahead_block_start_idx + num_lookahead_blocks
+            lookahead_block_names = block_names[lookahead_block_start_idx: lookahead_block_end_idx]
             logger.info(f"attach loss block {lookahead_block_names}") 
             attach_loss_multi_block = WrapperMultiblock(
                 [get_module(model, lookahead_block_name) for lookahead_block_name in lookahead_block_names]
             )
             
-            observe_block_names = block_names[i + 1 + num_lookahead_blocks: i + 1 + num_observe_blocks]
+            observe_block_start_idx = lookahead_block_end_idx
+            observe_block_end_idx = observe_block_start_idx + num_observe_blocks
+            observe_block_names = block_names[observe_block_start_idx: observe_block_end_idx]
             logger.info(f"observe block {observe_block_names}") 
             observe_block = WrapperMultiblock(
                 [get_module(model, observe_block_name) for observe_block_name in observe_block_names]
