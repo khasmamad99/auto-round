@@ -140,6 +140,7 @@ class AutoRound(object):
             seed: int = 42,
             nblocks: int = 1,
             num_lookahead_blocks: int = 0,
+            num_observe_blocks: int = 0,
             gradient_accumulate_steps: int = 1,
             not_use_best_mse: bool = False,
             dynamic_max_gap: int = -1,
@@ -164,6 +165,7 @@ class AutoRound(object):
         self.nsamples = nsamples
         self.nblocks = nblocks
         self.num_lookahead_blocks = num_lookahead_blocks
+        self.num_observe_blocks = num_observe_blocks
         self.bits = bits
         self.group_size = group_size
         self.sym = sym
@@ -175,7 +177,6 @@ class AutoRound(object):
         self.tokenizer = tokenizer
         self.seqlen = seqlen
         self.train_bs = batch_size
-        self.nblocks = nblocks
         self.device = detect_device(device)
         self.scale_dtype = convert_dtype_str2torch(scale_dtype)
         self.set_amp_dtype()
@@ -227,6 +228,8 @@ class AutoRound(object):
         assert self.group_size == -1 or self.group_size >= 1, "only supports positive group_size or -1(per channel)"
         assert self.act_group_size == -1 or self.act_group_size >= 1,\
             "only supports positive group_size or -1(per channel)"
+        assert self.num_lookahead_blocks >= 0, "num_lookahead_blocks must be non-negative"
+        assert self.num_observe_blocks >= 0, "num_observe_blocks must be non-negative"
         assert self.train_bs > 0, "batch size must be positive"
         assert self.iters > 0, "iters must be positive"
         assert self.seqlen > 0, "seqlen must be positive"
@@ -277,6 +280,7 @@ class AutoRound(object):
             block_names,
             nblocks=self.nblocks,
             num_lookahead_blocks=self.num_lookahead_blocks,
+            num_observe_blocks=self.num_observe_blocks,
             device=self.device,
         )
 
@@ -990,13 +994,14 @@ class AutoRound(object):
 
     def quant_block_with_lookahaed(
         self, 
-        block: WrapperMultiblock, 
+        combined_block: WrapperMultiblock, 
         input_ids, 
         input_others, 
         q_input=None, 
         device=torch.device("cpu"),
-        quantizable_block_name: str = "unk_layer",
-        output_block_name: str = "unk_layer",
+        fine_tune_block_name: str = "unk_layer",
+        attach_loss_block_name: str = "unk_layer",
+        observe_block_name: str = "unk_layer",
     ):
         """Quantize the weights of a given block of the model.
 
@@ -1010,9 +1015,9 @@ class AutoRound(object):
         Returns:
         Tuple: (q_outputs, output) if self.enable_quanted_input is True, else (None, output)
         """
-        quantizable_block, lookahaed_block = block.layers
-        quantizable_block_outputs = self.get_block_outputs(
-            quantizable_block, 
+        fine_tune_block, attach_loss_block, observe_block = combined_block.layers
+        fine_tune_block_outputs = self.get_block_outputs(
+            fine_tune_block, 
             input_ids, 
             input_others, 
             self.train_bs * self.infer_bs_coeff, 
@@ -1020,9 +1025,18 @@ class AutoRound(object):
             self.cache_device
         )
 
-        output = self.get_block_outputs(
-            block, 
-            input_ids, 
+        attach_loss_block_outputs = self.get_block_outputs(
+            attach_loss_block, 
+            fine_tune_block_outputs, 
+            input_others, 
+            self.train_bs * self.infer_bs_coeff, 
+            device,
+            self.cache_device
+        )
+        
+        observe_block_outputs = self.get_block_outputs(
+            observe_block, 
+            attach_loss_block_outputs,
             input_others, 
             self.train_bs * self.infer_bs_coeff, 
             device,
@@ -1033,11 +1047,11 @@ class AutoRound(object):
             input_ids = q_input
 
         quantized_layer_names, unquantized_layer_names = wrapper_block(
-            quantizable_block, self.enable_minmax_tuning, device=self.device)
+            fine_tune_block, self.enable_minmax_tuning, device=self.device)
 
         round_params = []
         minmax_params = []
-        for n, m in quantizable_block.named_modules():
+        for n, m in fine_tune_block.named_modules():
             if hasattr(m, "orig_layer"):
                 round_params.append(m.value)
                 minmax_params.append(m.min_scale)
@@ -1056,7 +1070,7 @@ class AutoRound(object):
                 f"layers in the block"
             )
             logger.info(dump_info)
-            return quantizable_block_outputs, quantizable_block_outputs
+            return fine_tune_block_outputs, fine_tune_block_outputs
 
         if self.lr_scheduler is None:
             lr_schedule = torch.optim.lr_scheduler.LinearLR(
@@ -1077,28 +1091,29 @@ class AutoRound(object):
         best_v, best_min_scale, best_max_scale = torch.tensor(0), torch.tensor(1.0), torch.tensor(1.0)
         
         if not self.disable_wandb:
-            wandb.define_metric(f"iter_count_quant_block/{quantizable_block_name}->")
+            wandb.define_metric(f"iter_count_quant_block/{fine_tune_block_name}->")
             wandb.define_metric(
-                f"loss_quant_block/{quantizable_block_name}->{output_block_name}", 
-                step_metric=f"iter_count_quant_block/{quantizable_block_name}->"
+                f"loss_quant_block/{fine_tune_block_name}->{attach_loss_block_name}", 
+                step_metric=f"iter_count_quant_block/{fine_tune_block_name}->"
             )
             wandb.define_metric(
-                f"lr_quant_block/{quantizable_block_name}->{output_block_name}", 
-                step_metric=f"iter_count_quant_block/{quantizable_block_name}->"
+                f"lr_quant_block/{fine_tune_block_name}->{attach_loss_block_name}", 
+                step_metric=f"iter_count_quant_block/{fine_tune_block_name}->"
             )
             
-            wandb.define_metric(f"iter_count_out_block/{output_block_name}<-")
+            wandb.define_metric(f"iter_count_out_block/{attach_loss_block_name}<-")
             wandb.define_metric(
-                f"loss_out_block/{output_block_name}<-{quantizable_block_name}", 
-                step_metric=f"iter_count_out_block/{output_block_name}<-"
+                f"loss_out_block/{attach_loss_block_name}<-{fine_tune_block_name}", 
+                step_metric=f"iter_count_out_block/{attach_loss_block_name}<-"
             )
             wandb.define_metric(
-                f"lr_out_block/{output_block_name}<-{quantizable_block_name}", 
-                step_metric=f"iter_count_out_block/{output_block_name}<-"
+                f"lr_out_block/{attach_loss_block_name}<-{fine_tune_block_name}", 
+                step_metric=f"iter_count_out_block/{attach_loss_block_name}<-"
             )
         
         for i in range(self.iters):
-            total_loss = 0
+            total_attach_loss_block_mse = 0
+            total_observe_block_mse = 0
             if self.sampler == "rand":
                 whole_indices = torch.randperm(nsamples)[:pick_samples]
             for tmp_step in range(self.gradient_accumulate_steps):
@@ -1113,38 +1128,67 @@ class AutoRound(object):
                     input_dim=self.input_dim,
                 )
 
-                current_output = [output[i] for i in indices]
-                current_output = torch.cat(current_output, dim=self.input_dim)
+                high_precision_attach_loss_block_output = [attach_loss_block_outputs[i] for i in indices]
+                high_precision_attach_loss_block_output = torch.cat(high_precision_attach_loss_block_output, dim=self.input_dim)
+                high_precision_attach_loss_block_output = to_device(high_precision_attach_loss_block_output, device)
 
-                current_output = to_device(current_output, device)
-
-                output_q = block_forward(
-                    block, current_input_ids, current_input_others, self.amp, self.amp_dtype, device
+                quantized_fine_tune_block_output = block_forward(
+                    fine_tune_block, current_input_ids, copy.deepcopy(current_input_others), self.amp, self.amp_dtype, device
+                )
+                quantized_attach_loss_block_output = block_forward(
+                    attach_loss_block, quantized_fine_tune_block_output, copy.deepcopy(current_input_others), self.amp, self.amp_dtype, device
                 )
                 
                 if self.amp:
                     with autocast(device_type=device.split(":")[0], dtype=self.amp_dtype):
-                        loss = mse_loss(output_q, current_output)  # pylint: disable=not-callable
+                        attach_loss_block_mse = mse_loss(
+                            quantized_attach_loss_block_output, 
+                            high_precision_attach_loss_block_output,
+                        )  # pylint: disable=not-callable
                 else:
-                    loss = mse_loss(  # pylint: disable=not-callable
-                        output_q.to(torch.float32), current_output.to(torch.float32)
+                    attach_loss_block_mse = mse_loss(  # pylint: disable=not-callable
+                        quantized_attach_loss_block_output.to(torch.float32), 
+                        high_precision_attach_loss_block_output.to(torch.float32)
                     )
+                    
+                # Observe
+                high_precision_observe_block_output = [observe_block_outputs[i] for i in indices]
+                high_precision_observe_block_output = torch.cat(high_precision_observe_block_output, dim=self.input_dim)
+                high_precision_observe_block_output = to_device(high_precision_observe_block_output, device)
+                
+                quantized_observe_block_output = block_forward(
+                    observe_block, quantized_attach_loss_block_output, copy.deepcopy(current_input_others), self.amp, self.amp_dtype, device
+                )
+                
+                if self.amp:
+                    with autocast(device_type=device.split(":")[0], dtype=self.amp_dtype):
+                        observe_block_mse = mse_loss(
+                            quantized_observe_block_output, 
+                            high_precision_observe_block_output,
+                        )  # pylint: disable=not-callable
+                else:
+                    observe_block_mse = mse_loss(  # pylint: disable=not-callable
+                        quantized_observe_block_output.to(torch.float32), 
+                        high_precision_observe_block_output.to(torch.float32)
+                    )    
 
-                total_loss += loss.item() / self.gradient_accumulate_steps
-                self.scale_loss_and_backward(scaler, loss)
+            total_attach_loss_block_mse += attach_loss_block_mse.item() / self.gradient_accumulate_steps
+            self.scale_loss_and_backward(scaler, attach_loss_block_mse)
+            total_observe_block_mse += observe_block_mse.item() / self.gradient_accumulate_steps
+
             if i == 0:
-                init_loss = total_loss
+                init_loss = total_attach_loss_block_mse
 
-            if total_loss < best_loss:
-                best_loss = total_loss
+            if total_attach_loss_block_mse < best_loss:
+                best_loss = total_attach_loss_block_mse
                 if not self.not_use_best_mse:
-                    # print(f"get better result at iter {i}, the loss is {total_loss}", flush=True)
-                    best_v = collect_round_v(quantizable_block)
-                    best_min_scale, best_max_scale = collect_minmax_scale(quantizable_block)
+                    # print(f"get better result at iter {i}, the loss is {total_attach_loss_block_mse}", flush=True)
+                    best_v = collect_round_v(fine_tune_block)
+                    best_min_scale, best_max_scale = collect_minmax_scale(fine_tune_block)
                     last_best_iter = i
             if self.not_use_best_mse and i == self.iters - 1:
-                best_v = collect_round_v(quantizable_block)
-                best_min_scale, best_max_scale = collect_minmax_scale(quantizable_block)
+                best_v = collect_round_v(fine_tune_block)
+                best_min_scale, best_max_scale = collect_minmax_scale(fine_tune_block)
 
             if not self.not_use_best_mse:
                 if self.dynamic_max_gap > 0 and i - last_best_iter >= self.dynamic_max_gap:
@@ -1153,16 +1197,16 @@ class AutoRound(object):
             if not self.disable_wandb:
                 wandb.log(
                     data={
-                        f"iter_count_quant_block/{quantizable_block_name}->": i,
-                        f"loss_quant_block/{quantizable_block_name}->{output_block_name}": total_loss,
-                        f"lr_quant_block/{quantizable_block_name}->{output_block_name}": lr_schedule.get_last_lr()[0],
-                        f"iter_count_out_block/{output_block_name}<-": i,
-                        f"loss_out_block/{output_block_name}<-{quantizable_block_name}": total_loss,
-                        f"lr_out_block/{output_block_name}<-{quantizable_block_name}": lr_schedule.get_last_lr()[0],
+                        f"iter_count_quant_block/{fine_tune_block_name}->": i,
+                        f"loss_quant_block/{fine_tune_block_name}->{attach_loss_block_name}": total_attach_loss_block_mse,
+                        f"lr_quant_block/{fine_tune_block_name}->{attach_loss_block_name}": lr_schedule.get_last_lr()[0],
+                        f"iter_count_out_block/{attach_loss_block_name}<-": i,
+                        f"loss_out_block/{attach_loss_block_name}<-{fine_tune_block_name}": total_attach_loss_block_mse,
+                        f"lr_out_block/{attach_loss_block_name}<-{fine_tune_block_name}": lr_schedule.get_last_lr()[0],
                     }, 
                 )
 
-        last_loss = total_loss
+        last_loss = total_attach_loss_block_mse
         best_iter = self.iters
         if not self.not_use_best_mse:
             last_loss = best_loss
@@ -1175,25 +1219,25 @@ class AutoRound(object):
         if len(unquantized_layer_names) != 0:
             logger.info(f"{unquantized_layer_names} have not been quantized")
         with torch.no_grad():
-            unwrapper_block(quantizable_block, best_v, best_min_scale, best_max_scale)
+            unwrapper_block(fine_tune_block, best_v, best_min_scale, best_max_scale)
         if self.enable_quanted_input:
-            quantizable_block = quantizable_block.to(device)
+            fine_tune_block = fine_tune_block.to(device)
             q_outputs = self.get_block_outputs(
-                quantizable_block, input_ids, input_others, self.train_bs * self.infer_bs_coeff, device,
+                fine_tune_block, input_ids, input_others, self.train_bs * self.infer_bs_coeff, device,
                 cache_device=self.cache_device
             )
-            quantizable_block = mv_module_from_gpu(quantizable_block, self.low_cpu_mem_usage)
+            fine_tune_block = mv_module_from_gpu(fine_tune_block, self.low_cpu_mem_usage)
             for i in range(len(input_ids)):
                 input_ids[i] = None
             torch.cuda.empty_cache()
 
-            return q_outputs, quantizable_block_outputs
+            return q_outputs, fine_tune_block_outputs
 
         else:
             for i in range(len(input_ids)):
                 input_ids[i] = None
             torch.cuda.empty_cache()
-            return None, quantizable_block_outputs
+            return None, fine_tune_block_outputs
 
 
     def quant_blocks(
@@ -1203,6 +1247,7 @@ class AutoRound(object):
             block_names,
             nblocks=1,
             num_lookahead_blocks: int = 0,
+            num_observe_blocks: int = 0,
             device=torch.device("cpu"),
     ):
         """Quantize and dequantize the weights of the specified blocks in the model.
@@ -1242,34 +1287,36 @@ class AutoRound(object):
                     input_others[key][i].to(tmp_dtype)
 
         for i in range(0, len(block_names), nblocks):
-            if nblocks == 1:
-                n = block_names[i]
-                logger.info(f"quantizing {i + 1}/{len(block_names)}, {n}")
-                qauntizable_block = get_module(model, n)
-            else:
-                quantizable_block_names = block_names[i: i + nblocks]
-                n = "&".join(quantizable_block_names)
-                logger.info(quantizable_block_names)
-                modules = [get_module(model, n) for n in quantizable_block_names]
-                qauntizable_block = WrapperMultiblock(modules)
-                
+            fine_tune_block_names = block_names[i: i + nblocks]
+            logger.info(f"fine tune block {fine_tune_block_names}")
+            fine_tune_block = WrapperMultiblock(
+                [get_module(model, fine_tune_block_name) for fine_tune_block_name in fine_tune_block_names]
+            )
+            
             lookahead_block_names = block_names[i + 1: i + 1 + num_lookahead_blocks]
-            lookahead_multi_block = WrapperMultiblock(
+            logger.info(f"attach loss block {lookahead_block_names}") 
+            attach_loss_multi_block = WrapperMultiblock(
                 [get_module(model, lookahead_block_name) for lookahead_block_name in lookahead_block_names]
             )
-            m = WrapperMultiblock([qauntizable_block, lookahead_multi_block])
-
-            m = m.to(device)
+            
+            observe_block_names = block_names[i + 1 + num_lookahead_blocks: i + 1 + num_observe_blocks]
+            logger.info(f"observe block {observe_block_names}") 
+            observe_block = WrapperMultiblock(
+                [get_module(model, observe_block_name) for observe_block_name in observe_block_names]
+            )
+            
+            combined_block = WrapperMultiblock([fine_tune_block, attach_loss_multi_block, observe_block])
+            combined_block = combined_block.to(device)
 
             output_block_name = block_names[min(i + num_lookahead_blocks, len(block_names) - 1)]
             q_input, input_ids = self.quant_block_with_lookahaed(
-                m,
+                combined_block,
                 input_ids,
                 input_others,
                 q_input=q_input,
                 device=device,
-                quantizable_block_name=format_layer_name(n),
-                output_block_name=format_layer_name(output_block_name),
+                # quantizable_block_name=format_layer_name(n),
+                # output_block_name=format_layer_name(output_block_name),
             )
 
             self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
