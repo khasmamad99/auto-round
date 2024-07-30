@@ -141,6 +141,9 @@ class AutoRound(object):
             nblocks: int = 1,
             num_lookahead_blocks: int = 0,
             num_observe_blocks: int = 0,
+            isolation_experiment_v2: bool = False,
+            fine_tune_block_idx: int = 0,
+            observe_block_idx: int = 0,
             gradient_accumulate_steps: int = 1,
             not_use_best_mse: bool = False,
             dynamic_max_gap: int = -1,
@@ -166,6 +169,9 @@ class AutoRound(object):
         self.nblocks = nblocks
         self.num_lookahead_blocks = num_lookahead_blocks
         self.num_observe_blocks = num_observe_blocks
+        self.isolation_experiment_v2 = isolation_experiment_v2
+        self.fine_tune_block_idx = fine_tune_block_idx
+        self.observe_block_idx = observe_block_idx
         self.bits = bits
         self.group_size = group_size
         self.sym = sym
@@ -230,6 +236,9 @@ class AutoRound(object):
             "only supports positive group_size or -1(per channel)"
         assert self.num_lookahead_blocks >= 0, "num_lookahead_blocks must be non-negative"
         assert self.num_observe_blocks >= 0, "num_observe_blocks must be non-negative"
+        assert self.fine_tune_block_idx <= self.observe_block_idx, (
+            f"fine_tune_block_idx {self.fine_tune_block_idx} should be less than observe_block_idx {self.observe_block_idx}"
+        )
         assert self.train_bs > 0, "batch size must be positive"
         assert self.iters > 0, "iters must be positive"
         assert self.seqlen > 0, "seqlen must be positive"
@@ -274,15 +283,26 @@ class AutoRound(object):
 
         self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
         torch.cuda.empty_cache()
-        self.quant_blocks(
-            self.model,
-            inputs,
-            block_names,
-            nblocks=self.nblocks,
-            num_lookahead_blocks=self.num_lookahead_blocks,
-            num_observe_blocks=self.num_observe_blocks,
-            device=self.device,
-        )
+        
+        if not self.isolation_experiment_v2:
+            self.quant_blocks(
+                self.model,
+                inputs,
+                block_names,
+                nblocks=self.nblocks,
+                num_lookahead_blocks=self.num_lookahead_blocks,
+                num_observe_blocks=self.num_observe_blocks,
+                device=self.device,
+            )
+        else:
+            self.quant_blocks_isolation_experiment_v2(
+                self.model,
+                inputs,
+                block_names,
+                fine_tune_block_idx=self.fine_tune_block_idx,
+                observe_block_idx=self.observe_block_idx,
+                device=self.device,
+            )
 
         self.quant_layers(layer_names, all_inputs)
 
@@ -1316,6 +1336,115 @@ class AutoRound(object):
             q_input, input_ids = self.quant_block_with_lookahead(
                 combined_block,
                 input_ids,
+                input_others,
+                q_input=q_input,
+                device=device,
+                # quantizable_block_name=format_layer_name(n),
+                # output_block_name=format_layer_name(output_block_name),
+            )
+
+            self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
+            torch.cuda.empty_cache()
+
+        del q_input
+        del input_ids
+        del input_others
+        del inputs
+
+        torch.cuda.empty_cache()
+
+    def quant_blocks_isolation_experiment_v2(
+            self,
+            model: torch.nn.Module,
+            inputs,
+            block_names,
+            fine_tune_block_idx: int = 0,
+            observe_block_idx: int = 0,
+            device=torch.device("cpu"),
+    ):
+        """Quantize and dequantize the weights of the specified blocks in the model.
+
+        Args:
+        model: The PyTorch model to be quantized.
+        inputs: The input data for quantization.
+        block_names: The names of the blocks to be quantized and dequantized.
+        nblocks: The number of blocks to quantize and dequantize.
+        device: The device for quantization and dequantization.
+
+        Returns:
+        None
+        """
+        assert self.observe_block_idx < len(block_names), (
+            f"observe_block_idx {self.observe_block_idx} should be less than the number of blocks {len(block_names)}"   
+        )
+        
+        logger.info("Quantizing blocks with lookahead ablation")
+        
+        q_input = None
+        torch.cuda.empty_cache()
+        for n, m in model.named_parameters():
+            m.requires_grad_(False)
+        input_ids = inputs["input_ids"]
+        inputs.pop("input_ids", None)
+        input_others = inputs
+        torch.cuda.empty_cache()
+        input_ids = to_device(input_ids, self.cache_device)
+        input_others = to_device(input_others, self.cache_device)
+        ## as in calibration phase, we may use bf16 for calibration due to low_gpu_memory usage
+        tmp_dtype = self.amp_dtype if self.amp else torch.float32
+        for i in range(len(input_ids)):
+            input_ids[i] = input_ids[i].to(tmp_dtype)
+
+        for key in input_others.keys():
+            if isinstance(input_others[key], torch.Tensor) and (
+                    input_others[key].dtype == torch.float16 or input_others[key].dtype == torch.bfloat16
+            ):
+                input_others[key] = input_others[key].to(tmp_dtype)
+            elif isinstance(input_others[key], list):
+                for i in range(len(input_others[key])):
+                    input_others[key][i].to(tmp_dtype)
+                    
+        preceding_block_names = block_names[:fine_tune_block_idx]
+        preceding_block = WrapperMultiblock(
+            [get_module(model, preceding_block_name) for preceding_block_name in preceding_block_names]
+        )
+        logger.info(f"preceding block {preceding_block_names}")
+
+        preceding_block_outputs = self.get_block_outputs(
+            preceding_block, input_ids, input_others, self.train_bs * self.infer_bs_coeff, device, self.cache_device
+        )
+        
+        fine_tune_block_name = block_names[fine_tune_block_idx]
+        for attach_loss_block_idx in range(fine_tune_block_idx, observe_block_idx + 1):
+            fine_tune_block = copy.deepcopy(get_module(model, fine_tune_block_name))  # copy.deepcopy since quantization will change the block
+            logger.info(f"fine tune block {fine_tune_block_name}")
+            
+            if attach_loss_block_idx == fine_tune_block_idx:
+                attach_loss_block_names = fine_tune_block_name
+                attach_loss_block = WrapperMultiblock([])  # empty block
+            else:
+                attach_loss_block_names = block_names[fine_tune_block_idx + 1: attach_loss_block_idx + 1]
+                attach_loss_block =  WrapperMultiblock(
+                    [get_module(model, attach_loss_block_name) for attach_loss_block_name in attach_loss_block_names]
+                )
+            logger.info(f"attach loss block {attach_loss_block_names}")
+            
+            if attach_loss_block_idx == observe_block_idx:
+                observe_block_names = attach_loss_block_names
+                observe_block = WrapperMultiblock([])
+            else:
+                observe_block_names = block_names[attach_loss_block_idx + 1: observe_block_idx + 1]
+                observe_block = WrapperMultiblock(
+                    [get_module(model, observe_block_name) for observe_block_name in observe_block_names]
+                )
+            logger.info(f"observe block {observe_block_names}") 
+            
+            combined_block = WrapperMultiblock([fine_tune_block, attach_loss_block, observe_block])
+            combined_block = combined_block.to(device)
+
+            q_input, input_ids = self.quant_block_with_lookahead(
+                combined_block,
+                preceding_block_outputs,
                 input_others,
                 q_input=q_input,
                 device=device,
