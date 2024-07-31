@@ -1111,24 +1111,18 @@ class AutoRound(object):
         best_v, best_min_scale, best_max_scale = torch.tensor(0), torch.tensor(1.0), torch.tensor(1.0)
         
         if not self.disable_wandb:
-            wandb.define_metric(f"iter_count_quant_block/{fine_tune_block_name}->")
+            wandb.define_metric(f"iter_count/{fine_tune_block_name}->{observe_block_name}")
             wandb.define_metric(
-                f"loss_quant_block/{fine_tune_block_name}->{attach_loss_block_name}", 
-                step_metric=f"iter_count_quant_block/{fine_tune_block_name}->"
+                f"attach_loss_block_mse/{fine_tune_block_name}->{observe_block_name}/{attach_loss_block_name}", 
+                step_metric=f"iter_count/{fine_tune_block_name}->{observe_block_name}"
             )
             wandb.define_metric(
-                f"lr_quant_block/{fine_tune_block_name}->{attach_loss_block_name}", 
-                step_metric=f"iter_count_quant_block/{fine_tune_block_name}->"
-            )
-            
-            wandb.define_metric(f"iter_count_out_block/{attach_loss_block_name}<-")
-            wandb.define_metric(
-                f"loss_out_block/{attach_loss_block_name}<-{fine_tune_block_name}", 
-                step_metric=f"iter_count_out_block/{attach_loss_block_name}<-"
+                f"observe_block_mse/{fine_tune_block_name}->{observe_block_name}/{attach_loss_block_name}", 
+                step_metric=f"iter_count/{fine_tune_block_name}->{observe_block_name}"
             )
             wandb.define_metric(
-                f"lr_out_block/{attach_loss_block_name}<-{fine_tune_block_name}", 
-                step_metric=f"iter_count_out_block/{attach_loss_block_name}<-"
+                f"lr/{fine_tune_block_name}->{observe_block_name}/{attach_loss_block_name}", 
+                step_metric=f"iter_count/{fine_tune_block_name}->{observe_block_name}"
             )
         
         for i in range(self.iters):
@@ -1158,6 +1152,9 @@ class AutoRound(object):
                 quantized_attach_loss_block_output = block_forward(
                     attach_loss_block, quantized_fine_tune_block_output, copy.deepcopy(current_input_others), self.amp, self.amp_dtype, device
                 )
+                quantized_fine_tune_block_output = None
+                del quantized_fine_tune_block_output
+                torch.cuda.empty_cache()
                 
                 if self.amp:
                     with autocast(device_type=device.split(":")[0], dtype=self.amp_dtype):
@@ -1171,6 +1168,12 @@ class AutoRound(object):
                         high_precision_attach_loss_block_output.to(torch.float32)
                     )
                     
+                current_input_ids = None
+                high_precision_attach_loss_block_output = None
+                del current_input_ids
+                del high_precision_attach_loss_block_output
+                torch.cuda.empty_cache()
+                
                 # Observe
                 high_precision_observe_block_output = [observe_block_outputs[i] for i in indices]
                 high_precision_observe_block_output = torch.cat(high_precision_observe_block_output, dim=self.input_dim)
@@ -1179,6 +1182,10 @@ class AutoRound(object):
                 quantized_observe_block_output = block_forward(
                     observe_block, quantized_attach_loss_block_output, copy.deepcopy(current_input_others), self.amp, self.amp_dtype, device
                 )
+                
+                quantized_attach_loss_block_output = None
+                del quantized_attach_loss_block_output
+                torch.cuda.empty_cache()
                 
                 if self.amp:
                     with autocast(device_type=device.split(":")[0], dtype=self.amp_dtype):
@@ -1190,7 +1197,13 @@ class AutoRound(object):
                     observe_block_mse = mse_loss(  # pylint: disable=not-callable
                         quantized_observe_block_output.to(torch.float32), 
                         high_precision_observe_block_output.to(torch.float32)
-                    )    
+                    )
+                
+                high_precision_observe_block_output = None
+                quantized_observe_block_output = None
+                del high_precision_observe_block_output
+                del quantized_observe_block_output
+                torch.cuda.empty_cache()
 
             total_attach_loss_block_mse += attach_loss_block_mse.item() / self.gradient_accumulate_steps
             self.scale_loss_and_backward(scaler, attach_loss_block_mse)
@@ -1217,12 +1230,10 @@ class AutoRound(object):
             if not self.disable_wandb:
                 wandb.log(
                     data={
-                        f"iter_count_quant_block/{fine_tune_block_name}->": i,
-                        f"loss_quant_block/{fine_tune_block_name}->{attach_loss_block_name}": total_attach_loss_block_mse,
-                        f"lr_quant_block/{fine_tune_block_name}->{attach_loss_block_name}": lr_schedule.get_last_lr()[0],
-                        f"iter_count_out_block/{attach_loss_block_name}<-": i,
-                        f"loss_out_block/{attach_loss_block_name}<-{fine_tune_block_name}": total_attach_loss_block_mse,
-                        f"lr_out_block/{attach_loss_block_name}<-{fine_tune_block_name}": lr_schedule.get_last_lr()[0],
+                        f"iter_count/{fine_tune_block_name}->{observe_block_name}": i,
+                        f"attach_loss_block_mse/{fine_tune_block_name}->{observe_block_name}/{attach_loss_block_name}": total_attach_loss_block_mse,
+                        f"observe_block_mse/{fine_tune_block_name}->{observe_block_name}/{attach_loss_block_name}": total_observe_block_mse,
+                        f"lr/{fine_tune_block_name}->{observe_block_name}/{attach_loss_block_name}": lr_schedule.get_last_lr()[0],
                     }, 
                 )
 
@@ -1408,11 +1419,17 @@ class AutoRound(object):
         preceding_block = WrapperMultiblock(
             [get_module(model, preceding_block_name) for preceding_block_name in preceding_block_names]
         )
+        preceding_block = preceding_block.to(device)
         logger.info(f"preceding block {preceding_block_names}")
 
         preceding_block_outputs = self.get_block_outputs(
             preceding_block, input_ids, input_others, self.train_bs * self.infer_bs_coeff, device, self.cache_device
         )
+        
+        for i in range(len(input_ids)):
+            input_ids[i] = None
+        del input_ids
+        torch.cuda.empty_cache()
         
         fine_tune_block_name = block_names[fine_tune_block_idx]
         for attach_loss_block_idx in range(fine_tune_block_idx, observe_block_idx + 1):
@@ -1442,21 +1459,21 @@ class AutoRound(object):
             combined_block = WrapperMultiblock([fine_tune_block, attach_loss_block, observe_block])
             combined_block = combined_block.to(device)
 
-            q_input, input_ids = self.quant_block_with_lookahead(
+            self.quant_block_with_lookahead(
                 combined_block,
-                preceding_block_outputs,
+                copy.deepcopy(preceding_block_outputs),
                 input_others,
                 q_input=q_input,
                 device=device,
-                # quantizable_block_name=format_layer_name(n),
-                # output_block_name=format_layer_name(output_block_name),
+                fine_tune_block_name=format_layer_name(fine_tune_block_name if isinstance(fine_tune_block_name, str) else fine_tune_block_name[-1]),
+                attach_loss_block_name=format_layer_name(attach_loss_block_names if isinstance(attach_loss_block_names, str) else attach_loss_block_names[-1]),
+                observe_block_name=format_layer_name(observe_block_names if isinstance(observe_block_names, str) else observe_block_names[-1]),
             )
 
             self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
             torch.cuda.empty_cache()
 
         del q_input
-        del input_ids
         del input_others
         del inputs
 
