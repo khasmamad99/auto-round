@@ -19,7 +19,7 @@ import re
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-WANDB_PROJECT_NAME = "khas-thesis-autoround"
+WANDB_PROJECT_NAME = "khas-thesis-autoround-isolation-exp-v2"
 WANDB_ENTITY = "recogni"
 WANDB_LOG_DIR = "/home/khasmamad/"
 
@@ -316,7 +316,10 @@ if __name__ == '__main__':
               f"gpu")
 
     if not args.disable_wandb:
-        run_name = f"{model_name.split('/')[-1]}-w{args.bits}g{args.group_size}-blcks={args.nblocks}-lkhd_blcks={args.num_lookahead_blocks}"
+        if not args.isolation_experiment_v2:
+            run_name = f"{model_name.split('/')[-1]}-w{args.bits}g{args.group_size}-blcks={args.nblocks}-lkhd_blcks={args.num_lookahead_blocks}-obsrv_blcks={args.num_observe_blocks}"
+        else:
+            run_name = f"{model_name.split('/')[-1]}-w{args.bits}g{args.group_size}-fine_tune_block_idx={args.fine_tune_block_idx}-observe_block_idx={args.observe_block_idx}"
         
         run = wandb.init(
             config=vars(args),
