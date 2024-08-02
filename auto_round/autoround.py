@@ -131,6 +131,7 @@ class AutoRound(object):
             enable_minmax_tuning: bool = True,
             lr: float = None,
             minmax_lr: float = None,
+            enable_lr_scheduler: bool = False,
             low_gpu_mem_usage: bool = False,
             low_cpu_mem_usage: bool = False,
             iters: int = 200,
@@ -144,6 +145,7 @@ class AutoRound(object):
             isolation_experiment_v2: bool = False,
             fine_tune_block_idx: int = 0,
             observe_block_idx: int = 0,
+            attach_loss_block_indices: list[int] = [-1],
             gradient_accumulate_steps: int = 1,
             not_use_best_mse: bool = False,
             dynamic_max_gap: int = -1,
@@ -172,6 +174,7 @@ class AutoRound(object):
         self.isolation_experiment_v2 = isolation_experiment_v2
         self.fine_tune_block_idx = fine_tune_block_idx
         self.observe_block_idx = observe_block_idx
+        self.attach_loss_block_indices = attach_loss_block_indices
         self.bits = bits
         self.group_size = group_size
         self.sym = sym
@@ -196,6 +199,7 @@ class AutoRound(object):
             self.iters = 200
         self.lr = lr or (1.0 / self.iters)
         self.minmax_lr = minmax_lr or self.lr
+        self.enable_lr_scheduler = enable_lr_scheduler
 
         self.sampler = sampler
         self.gradient_accumulate_steps = gradient_accumulate_steps
@@ -239,6 +243,17 @@ class AutoRound(object):
         assert self.fine_tune_block_idx <= self.observe_block_idx, (
             f"fine_tune_block_idx {self.fine_tune_block_idx} should be less than observe_block_idx {self.observe_block_idx}"
         )
+        
+        if -1 in self.attach_loss_block_indices:
+            assert len(self.attach_loss_block_indices) == 1, "-1 should be the only element or should not be included in attach_loss_block_indices"
+        elif any([i < 0 for i in self.attach_loss_block_indices]):
+            assert False, "attach_loss_block_indices should be non-negative"
+        elif any([i < self.fine_tune_block_idx or i > self.observe_block_idx for i in self.attach_loss_block_indices]):
+            assert False, (
+                f"attach_loss_block_indices should be in the range of fine_tune_block_idx {self.fine_tune_block_idx}"
+                f" and observe_block_idx {self.observe_block_idx} (inclusive). Received {self.attach_loss_block_indices}."
+            )
+        
         assert self.train_bs > 0, "batch size must be positive"
         assert self.iters > 0, "iters must be positive"
         assert self.seqlen > 0, "seqlen must be positive"
@@ -301,6 +316,7 @@ class AutoRound(object):
                 block_names,
                 fine_tune_block_idx=self.fine_tune_block_idx,
                 observe_block_idx=self.observe_block_idx,
+                attach_loss_block_indices=self.attach_loss_block_indices,
                 device=self.device,
             )
 
@@ -782,12 +798,16 @@ class AutoRound(object):
         else:
             optimizer = self.optimizer(round_params, lr=self.lr, weight_decay=0)
 
-        if self.lr_scheduler is None:
-            lr_schedule = torch.optim.lr_scheduler.LinearLR(
-                optimizer, start_factor=1.0, end_factor=0.0, total_iters=self.iters, verbose=False
-            )
+        if self.enable_lr_scheduler:
+            if self.lr_scheduler is None:
+                lr_schedule = torch.optim.lr_scheduler.LinearLR(
+                    optimizer, start_factor=1.0, end_factor=0.0, total_iters=self.iters, verbose=False
+                )
+            else:
+                lr_schedule = copy.deepcopy(self.lr_scheduler)
         else:
-            lr_schedule = copy.deepcopy(self.lr_scheduler)
+            lr_schedule = None
+            
         nsamples = len(inputs)
         last_best_iter = 0
         best_loss = torch.finfo(torch.float).max
@@ -1092,12 +1112,15 @@ class AutoRound(object):
             logger.info(dump_info)
             return fine_tune_block_outputs, fine_tune_block_outputs
 
-        if self.lr_scheduler is None:
-            lr_schedule = torch.optim.lr_scheduler.LinearLR(
-                optimizer, start_factor=1.0, end_factor=0.0, total_iters=self.iters, verbose=False
-            )
+        if self.enable_lr_scheduler:
+            if self.lr_scheduler is None:
+                lr_schedule = torch.optim.lr_scheduler.LinearLR(
+                    optimizer, start_factor=1.0, end_factor=0.0, total_iters=self.iters, verbose=False
+                )
+            else:
+                lr_schedule = copy.deepcopy(self.lr_scheduler)
         else:
-            lr_schedule = copy.deepcopy(self.lr_scheduler)
+            lr_schedule = None
 
         pick_samples = self.train_bs * self.gradient_accumulate_steps
         nsamples = len(input_ids)
@@ -1228,12 +1251,13 @@ class AutoRound(object):
                     break
             self.step(scaler, optimizer, lr_schedule)
             if not self.disable_wandb:
+                learning_rate = lr_schedule.get_last_lr()[0] if lr_schedule is not None else self.lr
                 wandb.log(
                     data={
                         f"iter_count/{fine_tune_block_name}->{observe_block_name}": i,
                         f"attach_loss_block_mse/{fine_tune_block_name}->{observe_block_name}/{attach_loss_block_name}": total_attach_loss_block_mse,
                         f"observe_block_mse/{fine_tune_block_name}->{observe_block_name}/{attach_loss_block_name}": total_observe_block_mse,
-                        f"lr/{fine_tune_block_name}->{observe_block_name}/{attach_loss_block_name}": lr_schedule.get_last_lr()[0],
+                        f"lr/{fine_tune_block_name}->{observe_block_name}/{attach_loss_block_name}": learning_rate,
                     }, 
                 )
 
@@ -1371,6 +1395,7 @@ class AutoRound(object):
             block_names,
             fine_tune_block_idx: int = 0,
             observe_block_idx: int = 0,
+            attach_loss_block_indices: list[int] = [-1],
             device=torch.device("cpu"),
     ):
         """Quantize and dequantize the weights of the specified blocks in the model.
@@ -1432,7 +1457,10 @@ class AutoRound(object):
         torch.cuda.empty_cache()
         
         fine_tune_block_name = block_names[fine_tune_block_idx]
-        for attach_loss_block_idx in range(fine_tune_block_idx, observe_block_idx + 1):
+        if attach_loss_block_indices[0] == -1:
+            attach_loss_block_indices = list(range(fine_tune_block_idx, observe_block_idx + 1))
+            
+        for attach_loss_block_idx in attach_loss_block_indices:
             fine_tune_block = copy.deepcopy(get_module(model, fine_tune_block_name))  # copy.deepcopy since quantization will change the block
             logger.info(f"fine tune block {fine_tune_block_name}")
             
@@ -1658,7 +1686,8 @@ class AutoRound(object):
         if is_optimum_habana_available():
             htcore.mark_step()
         optimizer.zero_grad()
-        lr_schedule.step()
+        if lr_schedule is not None:
+            lr_schedule.step()
 
 
 class AutoOPTRound(AutoRound):
