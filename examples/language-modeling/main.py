@@ -1,5 +1,6 @@
 import argparse
 import sys
+import typing
 
 sys.path.insert(0, '../..')
 parser = argparse.ArgumentParser()
@@ -19,7 +20,8 @@ import re
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-WANDB_PROJECT_NAME = "khas-thesis-autoround-isolation-exp-v2"
+WANDB_PROJECT_NAME_ISOLATION_EXPERIMENT_V2 = "khas-thesis-autoround-isolation-exp-v2"
+WANDB_PROJECT_NAME = "khas-thesis-autoround"
 WANDB_ENTITY = "recogni"
 WANDB_LOG_DIR = "/home/khasmamad/"
 
@@ -64,6 +66,8 @@ if __name__ == '__main__':
 
     parser.add_argument("--minmax_lr", default=None, type=float,
                         help="minmax learning rate, if None,it will beset to be the same with lr")
+    
+    parser.add_argument("--enable_lr_scheduler", action='store_true', help="enable learning rate scheduler")
 
     parser.add_argument("--seed", default=42, type=int,
                         help="seed")
@@ -86,6 +90,7 @@ if __name__ == '__main__':
     parser.add_argument("--isolation_experiment_v2", action='store_true', help="isolation experiment v2")
     parser.add_argument("--fine_tune_block_idx", default=0, type=int, help="fine tune block idx")
     parser.add_argument("--observe_block_idx", default=0, type=int, help="observe block idx")
+    parser.add_argument("--attach_loss_block_indices", type=int, nargs="+", default=[-1], help="Attach loss block indices. If -1 all blocks are used.")
 
     parser.add_argument("--nsamples", default=128, type=int,
                         help="number of samples")
@@ -317,13 +322,13 @@ if __name__ == '__main__':
 
     if not args.disable_wandb:
         if not args.isolation_experiment_v2:
-            run_name = f"{model_name.split('/')[-1]}-w{args.bits}g{args.group_size}-blcks={args.nblocks}-lkhd_blcks={args.num_lookahead_blocks}-obsrv_blcks={args.num_observe_blocks}"
+            run_name = f"{model_name.split('/')[-1]}-w{args.bits}g{args.group_size}-blcks={args.nblocks}-lkhd_blcks={args.num_lookahead_blocks}-obsrv_blcks={args.num_observe_blocks}-lr={args.lr}-iters={args.iters}"
         else:
-            run_name = f"{model_name.split('/')[-1]}-w{args.bits}g{args.group_size}-fine_tune_block_idx={args.fine_tune_block_idx}-observe_block_idx={args.observe_block_idx}"
+            run_name = f"{model_name.split('/')[-1]}-w{args.bits}g{args.group_size}-fine_tune_block_idx={args.fine_tune_block_idx}-observe_block_idx={args.observe_block_idx}-lr={args.lr}-iters={args.iters}"
         
         run = wandb.init(
             config=vars(args),
-            project=WANDB_PROJECT_NAME,
+            project=WANDB_PROJECT_NAME if not args.isolation_experiment_v2 else WANDB_PROJECT_NAME_ISOLATION_EXPERIMENT_V2,
             entity=WANDB_ENTITY,
             name=run_name,
             mode="offline" if args.wandb_offline else "online",
@@ -335,7 +340,8 @@ if __name__ == '__main__':
                       dataset=args.dataset, seqlen=seqlen, 
                       nblocks=args.nblocks, num_lookahead_blocks=args.num_lookahead_blocks, num_observe_blocks=args.num_observe_blocks,
                       isolation_experiment_v2=args.isolation_experiment_v2, fine_tune_block_idx=args.fine_tune_block_idx, observe_block_idx=args.observe_block_idx,
-                      iters=args.iters, lr=args.lr,
+                      attach_loss_block_indices=args.attach_loss_block_indices,
+                      iters=args.iters, lr=args.lr, enable_lr_scheduler=args.enable_lr_scheduler, 
                       minmax_lr=args.minmax_lr, enable_quanted_input=not args.disable_quanted_input, device=device_str,
                       amp=not args.disable_amp, nsamples=args.nsamples,
                       low_gpu_mem_usage=args.low_gpu_mem_usage,
