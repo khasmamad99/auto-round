@@ -354,8 +354,8 @@ if __name__ == '__main__':
             dir=WANDB_LOG_DIR,
         )
         
-    
-    autoround = round(model, tokenizer, args.bits, args.group_size, sym=args.sym, batch_size=args.train_bs,
+    model_name = args.model_name.rstrip("/")
+    autoround = round(model, tokenizer, model_name, args.bits, args.group_size, sym=args.sym, batch_size=args.train_bs,
                       dataset=args.dataset, seqlen=seqlen, 
                       nblocks=args.nblocks, num_lookahead_blocks=args.num_lookahead_blocks, num_observe_blocks=args.num_observe_blocks,
                       isolation_experiment_v2=args.isolation_experiment_v2, fine_tune_block_idx=args.fine_tune_block_idx, observe_block_idx=args.observe_block_idx,
@@ -372,7 +372,6 @@ if __name__ == '__main__':
                       disable_wandb=args.disable_wandb,
                       )
     model, _ = autoround.quantize()
-    model_name = args.model_name.rstrip("/")
     if args.low_cpu_mem_mode == 1 or args.low_cpu_mem_mode == 2:
         import shutil
         shutil.rmtree(args.low_cpu_mem_tmp_dir, ignore_errors=True)
@@ -488,7 +487,7 @@ if __name__ == '__main__':
         from lm_eval.utils import make_table
         
         if not args.disable_wandb:
-            from eval_042.utils import make_pandas_dataframe_from_lm_eval_results
+            from auto_round.learning_curve_stats_utils import make_pandas_dataframe_from_lm_eval_results
             results_df = make_pandas_dataframe_from_lm_eval_results(res)
             
             results_df.insert(0, "run_name", run_name)
