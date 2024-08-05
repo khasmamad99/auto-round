@@ -22,6 +22,7 @@ import transformers
 from torch import autocast
 
 import wandb
+import lm_eval
 
 from .calib_dataset import get_dataloader
 from .quantizer import WrapperMultiblock, wrapper_block, unwrapper_block, WrapperLinear, unwrapper_layer
@@ -49,6 +50,15 @@ from .utils import (
 )
 
 from .low_cpu_mem.utils import get_layers_before_block
+from .learning_curve_stats_utils import (
+    calculate_convergence_iter, 
+    calculate_average_absolute_change, 
+    calculate_slope, 
+    plot_learning_curve,
+    make_pandas_dataframe_from_lm_eval_results,
+)
+
+
 
 class AutoRound(object):
     """This is Signround+ which is an advanced version of Signround. For more information,
@@ -117,12 +127,14 @@ class AutoRound(object):
             self,
             model,
             tokenizer,
+            model_name: Optional[str] = None,
             bits: int = 4,
             group_size: int = 128,
             sym: bool = False,
             layer_config: dict = {},
             enable_full_range: bool = False,  ##for symmetric, TODO support later
             batch_size: int = 8,
+            eval_batch_size: int = 4,
             amp: bool = True,
             device: str = None,
             lr_scheduler=None,
@@ -139,6 +151,9 @@ class AutoRound(object):
             nsamples: int = 128,
             sampler: str = "rand",
             seed: int = 42,
+            lm_eval_random_seed: int = 0,
+            lm_eval_numpy_random_seed: int = 1234,
+            lm_eval_torch_random_seed: int = 1234,
             nblocks: int = 1,
             num_lookahead_blocks: int = 0,
             num_observe_blocks: int = 0,
@@ -164,6 +179,7 @@ class AutoRound(object):
         self.low_cpu_mem_usage = low_cpu_mem_usage
         self.model = model.eval()
         self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
+        self.model_name = model_name
         self.amp = amp
         self.enable_quanted_input = enable_quanted_input
         self.enable_minmax_tuning = enable_minmax_tuning
@@ -183,9 +199,13 @@ class AutoRound(object):
         self.supported_types = [torch.nn.Linear, transformers.modeling_utils.Conv1D]
         self.layer_config = layer_config
         self.seed = seed
+        self.lm_eval_random_seed = lm_eval_random_seed
+        self.lm_eval_numpy_random_seed = lm_eval_numpy_random_seed
+        self.lm_eval_torch_random_seed = lm_eval_torch_random_seed
         self.tokenizer = tokenizer
         self.seqlen = seqlen
         self.train_bs = batch_size
+        self.eval_batch_size = eval_batch_size
         self.device = detect_device(device)
         self.scale_dtype = convert_dtype_str2torch(scale_dtype)
         self.set_amp_dtype()
@@ -255,6 +275,7 @@ class AutoRound(object):
             )
         
         assert self.train_bs > 0, "batch size must be positive"
+        assert self.eval_batch_size > 0, "eval batch size must be positive"
         assert self.iters > 0, "iters must be positive"
         assert self.seqlen > 0, "seqlen must be positive"
         assert self.nblocks > 0, "nblocks must be positive"
@@ -1148,6 +1169,7 @@ class AutoRound(object):
                 step_metric=f"iter_count/{fine_tune_block_name}->{observe_block_name}"
             )
         
+        mses_observe_block = []
         for i in range(self.iters):
             total_attach_loss_block_mse = 0
             total_observe_block_mse = 0
@@ -1232,6 +1254,8 @@ class AutoRound(object):
                 self.scale_loss_and_backward(scaler, attach_loss_block_mse)
                 total_observe_block_mse += observe_block_mse.item() / self.gradient_accumulate_steps
 
+            mses_observe_block.append(total_observe_block_mse)
+            
             if i == 0:
                 init_loss = total_attach_loss_block_mse
 
@@ -1286,13 +1310,13 @@ class AutoRound(object):
                 input_ids[i] = None
             torch.cuda.empty_cache()
 
-            return q_outputs, fine_tune_block_outputs
+            return q_outputs, fine_tune_block_outputs, mses_observe_block
 
         else:
             for i in range(len(input_ids)):
                 input_ids[i] = None
             torch.cuda.empty_cache()
-            return None, fine_tune_block_outputs
+            return None, fine_tune_block_outputs, mses_observe_block
 
 
     def quant_blocks(
@@ -1371,7 +1395,7 @@ class AutoRound(object):
             combined_block = WrapperMultiblock([fine_tune_block, attach_loss_block, observe_block])
             combined_block = combined_block.to(device)
 
-            q_input, input_ids = self.quant_block_with_lookahead(
+            q_input, input_ids, _ = self.quant_block_with_lookahead(
                 combined_block,
                 input_ids,
                 input_others,
@@ -1463,7 +1487,8 @@ class AutoRound(object):
         fine_tune_block_name = block_names[fine_tune_block_idx]
         if attach_loss_block_indices[0] == -1:
             attach_loss_block_indices = list(range(fine_tune_block_idx, observe_block_idx + 1))
-            
+        
+        log_data = []
         for attach_loss_block_idx in attach_loss_block_indices:
             fine_tune_block = copy.deepcopy(get_module(model, fine_tune_block_name))  # copy.deepcopy since quantization will change the block
             logger.info(f"fine tune block {fine_tune_block_name}")
@@ -1491,19 +1516,76 @@ class AutoRound(object):
             combined_block = WrapperMultiblock([fine_tune_block, attach_loss_block, observe_block])
             combined_block = combined_block.to(device)
 
-            self.quant_block_with_lookahead(
+            fine_tune_block_name = fine_tune_block_name if isinstance(fine_tune_block_name, str) else fine_tune_block_name[-1]
+            attach_loss_block_name = attach_loss_block_names if isinstance(attach_loss_block_names, str) else attach_loss_block_names[-1]
+            observe_block_name = observe_block_names if isinstance(observe_block_names, str) else observe_block_names[-1]
+            
+            _, _, mses_observe_block = self.quant_block_with_lookahead(
                 combined_block,
                 copy.deepcopy(preceding_block_outputs),
                 input_others,
                 q_input=q_input,
                 device=device,
-                fine_tune_block_name=format_layer_name(fine_tune_block_name if isinstance(fine_tune_block_name, str) else fine_tune_block_name[-1]),
-                attach_loss_block_name=format_layer_name(attach_loss_block_names if isinstance(attach_loss_block_names, str) else attach_loss_block_names[-1]),
-                observe_block_name=format_layer_name(observe_block_names if isinstance(observe_block_names, str) else observe_block_names[-1]),
+                fine_tune_block_name=format_layer_name(fine_tune_block_name),
+                attach_loss_block_name=format_layer_name(attach_loss_block_name),
+                observe_block_name=format_layer_name(observe_block_name),
             )
 
             self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
             torch.cuda.empty_cache()
+            
+            if not self.disable_wandb:
+                convergence_iter = calculate_convergence_iter(mses_observe_block)
+                slope_first_tenth = calculate_slope(mses_observe_block, last_iter=len(convergence_iter) // 10)
+                slope = calculate_slope(mses_observe_block)
+                average_absolute_change = calculate_average_absolute_change(mses_observe_block, window=1)
+                
+                learning_curve_plot_title = f"Learning Curve: {fine_tune_block_name} -> {observe_block_name}"
+                learning_curve_plot = plot_learning_curve(mses_observe_block, title=learning_curve_plot_title)
+                
+                last_mse = mses_observe_block[-1]
+                min_mse = min(mses_observe_block)
+                min_mse_iter = mses_observe_block.index(min_mse)
+                
+                logger.info("Evaluating the model on the Wikitext 2 dataset")
+                lm_eval_results = lm_eval.simple_evaluate(
+                    model=self.model, 
+                    device=device, 
+                    tasks="wikitext", 
+                    batch_size=self.eval_batch_size,
+                    random_seed=self.lm_eval_random_seed,
+                    numpy_random_seed=self.lm_eval_numpy_random_seed,
+                    torch_random_seed=self.lm_eval_torch_random_seed,
+                )
+                
+                lm_eval_results_df = make_pandas_dataframe_from_lm_eval_results(lm_eval_results)
+                wikitext_perplexity = lm_eval_results_df.loc[
+                    lm_eval_results_df["Metric"] == "wikitext_perplexity", "Value"
+                ].values[0]
+                
+                
+                wandb_plotly_learning_curve_plot = wandb.Plotly(learning_curve_plot)
+                
+                lr_scheduler = "none" if not self.enable_lr_scheduler else "linear_decay"
+                log_data.append(
+                    [
+                        self.model_name, self.bits, self.group_size, fine_tune_block_name, observe_block_name, 
+                        self.iters, self.lr, lr_scheduler, self.nsamples, "signed_sgd",
+                        wandb_plotly_learning_curve_plot, convergence_iter, slope_first_tenth, slope, average_absolute_change, 
+                        min_mse_iter, min_mse, last_mse, wikitext_perplexity,
+                    ]
+                )
+                
+        if not self.disable_wandb:
+            table_columns = [
+                "model_name", "num_bits", "group_size", "fine_tune_block", "observe_block", 
+                "num_iters", "learning_rate", "lr_scheduler", "num_fine_tuning_samples", "optimizer",
+                "leraning_curve_plot", "convergence_iter", "slope_first_tenth", "slope", "avg_abs_change_mse",
+                "min_mse_iter", "min_mse", "last_mse", "wikitext_2_perplexity",
+            ]
+
+            wandb_table = wandb.Table(data=log_data, columns=table_columns)
+            wandb.log({"stats_table": wandb_table})
 
         del q_input
         del input_others
