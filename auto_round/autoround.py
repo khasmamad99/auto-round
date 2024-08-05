@@ -1228,9 +1228,9 @@ class AutoRound(object):
                 del quantized_observe_block_output
                 torch.cuda.empty_cache()
 
-            total_attach_loss_block_mse += attach_loss_block_mse.item() / self.gradient_accumulate_steps
-            self.scale_loss_and_backward(scaler, attach_loss_block_mse)
-            total_observe_block_mse += observe_block_mse.item() / self.gradient_accumulate_steps
+                total_attach_loss_block_mse += attach_loss_block_mse.item() / self.gradient_accumulate_steps
+                self.scale_loss_and_backward(scaler, attach_loss_block_mse)
+                total_observe_block_mse += observe_block_mse.item() / self.gradient_accumulate_steps
 
             if i == 0:
                 init_loss = total_attach_loss_block_mse
