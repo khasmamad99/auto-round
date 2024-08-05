@@ -322,9 +322,28 @@ if __name__ == '__main__':
 
     if not args.disable_wandb:
         if not args.isolation_experiment_v2:
-            run_name = f"{model_name.split('/')[-1]}-w{args.bits}g{args.group_size}-blcks={args.nblocks}-lkhd_blcks={args.num_lookahead_blocks}-obsrv_blcks={args.num_observe_blocks}-lr={args.lr}-iters={args.iters}"
+            run_name = (
+                f"{model_name.split('/')[-1]}"
+                f"-w{args.bits}g{args.group_size}"
+                f"-blcks={args.nblocks}"
+                f"-lkhd_blcks={args.num_lookahead_blocks}"
+                f"-lr={args.lr}"
+                f"-lr_scheduler={'none' if not args.enable_lr_scheduler else 'linear_decay'}"
+                f"-iters={args.iters}"
+                f"-nsamples={args.nsamples}"
+                f"-optimizer={'adam' if args.adam else 'signed_sgd'}"
+            )
         else:
-            run_name = f"{model_name.split('/')[-1]}-w{args.bits}g{args.group_size}-fine_tune_block_idx={args.fine_tune_block_idx}-observe_block_idx={args.observe_block_idx}-lr={args.lr}-iters={args.iters}"
+            run_name = (
+                f"{model_name.split('/')[-1]}"
+                f"-w{args.bits}g{args.group_size}"
+                f"-fine_tune_block_idx={args.fine_tune_block_idx}"
+                f"-observe_block_idx={args.observe_block_idx}"
+                f"-lr_scheduler={'none' if not args.enable_lr_scheduler else 'linear_decay'}"
+                f"-iters={args.iters}"
+                f"-nsamples={args.nsamples}"
+                f"-optimizer={'adam' if args.adam else 'signed_sgd'}"
+            )
         
         run = wandb.init(
             config=vars(args),
@@ -473,8 +492,14 @@ if __name__ == '__main__':
             results_df = make_pandas_dataframe_from_lm_eval_results(res)
             
             results_df.insert(0, "run_name", run_name)
+            results_df.insert(1, "model_name", model_name)
             results_df.insert(5, "num_blocks", args.nblocks)
             results_df.insert(6, "num_lookahead_blocks", args.num_lookahead_blocks)
+            results_df.insert(7, "learning_rate", args.lr)
+            results_df.insert(8, "lr_scheduler", "none" if not args.enable_lr_scheduler else "linear_decay")
+            results_df.insert(9, "num_iters", args.iters)
+            results_df.insert(10, "num_fine_tuning_samples", args.nsamples)
+            results_df.insert(11, "optimizer", "adam" if args.adam else "signed_sgd")
             
             wandb_table = wandb.Table(dataframe=results_df)
             wandb.log({f"lm_eval_{lm_eval_version.replace('.','')}_results": wandb_table})
