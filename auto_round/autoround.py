@@ -1595,6 +1595,9 @@ class AutoRound(object):
                         slope_first_tenth, slope, average_absolute_change, learning_curve_plot_wandb_html
                     ]
                 )
+        
+                # delete the checkpoint
+                os.rmdir(output_dir)
                 
         if not self.disable_wandb:
             table_columns = [
