@@ -16,6 +16,8 @@
 import copy
 import time
 from typing import Optional, Union
+import os
+import io
 
 import torch
 import transformers
@@ -1536,20 +1538,39 @@ class AutoRound(object):
             
             if not self.disable_wandb:
                 convergence_iter = calculate_convergence_iter(mses_observe_block)
-                slope_first_tenth = calculate_slope(mses_observe_block, last_iter=len(convergence_iter) // 10)
+                slope_first_tenth = calculate_slope(mses_observe_block, last_iter=len(mses_observe_block) // 10)
                 slope = calculate_slope(mses_observe_block)
                 average_absolute_change = calculate_average_absolute_change(mses_observe_block, window=1)
                 
-                learning_curve_plot_title = f"Learning Curve: {fine_tune_block_name} -> {observe_block_name}"
-                learning_curve_plot = plot_learning_curve(mses_observe_block, title=learning_curve_plot_title)
+                learning_curve_plot_title = f"Learning Curve: {observe_block_name}: {fine_tune_block_name} -> {attach_loss_block_name}"
+                learning_curve_plot = plot_learning_curve(
+                    mses_observe_block, 
+                    title=learning_curve_plot_title, 
+                    convergence_iter=convergence_iter,
+                )
+                buffer = io.StringIO()
+                learning_curve_plot.write_html(buffer, auto_play=False)
+                learning_curve_plot_wandb_html = wandb.Html(buffer)
+                buffer.close()
                 
                 last_mse = mses_observe_block[-1]
                 min_mse = min(mses_observe_block)
                 min_mse_iter = mses_observe_block.index(min_mse)
                 
                 logger.info("Evaluating the model on the Wikitext 2 dataset")
+                output_dir = os.path.join("tmp_autoround", f"{self.model_name}", f"{fine_tune_block_name}_{observe_block_name}")
+                
+                original_fine_tune_block = get_module(model, fine_tune_block_name)
+                setattr(model, fine_tune_block_name, fine_tune_block)
+                self.model.save_pretrained(output_dir)
+                self.tokenizer.save_pretrained(output_dir)
+                setattr(model, fine_tune_block_name, original_fine_tune_block)
+                
+                model_args = f"pretrained={output_dir}"
+                
                 lm_eval_results = lm_eval.simple_evaluate(
-                    model=self.model, 
+                    model="hf", 
+                    model_args=model_args,
                     device=device, 
                     tasks="wikitext", 
                     batch_size=self.eval_batch_size,
@@ -1560,28 +1581,27 @@ class AutoRound(object):
                 
                 lm_eval_results_df = make_pandas_dataframe_from_lm_eval_results(lm_eval_results)
                 wikitext_perplexity = lm_eval_results_df.loc[
-                    lm_eval_results_df["Metric"] == "wikitext_perplexity", "Value"
+                    lm_eval_results_df["Metric"] == "word_perplexity", "Value"
                 ].values[0]
-                
-                
-                wandb_plotly_learning_curve_plot = wandb.Plotly(learning_curve_plot)
-                
+                                
                 lr_scheduler = "none" if not self.enable_lr_scheduler else "linear_decay"
                 log_data.append(
                     [
-                        self.model_name, self.bits, self.group_size, fine_tune_block_name, observe_block_name, 
+                        self.model_name, self.bits, self.group_size, 
+                        format_layer_name(fine_tune_block_name), format_layer_name(attach_loss_block_name), 
+                        format_layer_name(observe_block_name), 
                         self.iters, self.lr, lr_scheduler, self.nsamples, "signed_sgd",
-                        wandb_plotly_learning_curve_plot, convergence_iter, slope_first_tenth, slope, average_absolute_change, 
-                        min_mse_iter, min_mse, last_mse, wikitext_perplexity,
+                        wikitext_perplexity, last_mse, min_mse, min_mse_iter, convergence_iter,
+                        slope_first_tenth, slope, average_absolute_change, learning_curve_plot_wandb_html
                     ]
                 )
                 
         if not self.disable_wandb:
             table_columns = [
-                "model_name", "num_bits", "group_size", "fine_tune_block", "observe_block", 
-                "num_iters", "learning_rate", "lr_scheduler", "num_fine_tuning_samples", "optimizer",
-                "leraning_curve_plot", "convergence_iter", "slope_first_tenth", "slope", "avg_abs_change_mse",
-                "min_mse_iter", "min_mse", "last_mse", "wikitext_2_perplexity",
+                "model_name", "num_bits", "group_size", "fine_tune_block", "attach_loss_block", "observe_block",
+                "num_iters", "learning_rate", "lr_scheduler", "num_fine_tuning_samples", "optimizer", 
+                "wikitext_2_perplexity", "last_mse", "min_mse", "min_mse_iter", "convergence_iter",
+                "slope_first_tenth", "slope", "avg_abs_change_mse", "leraning_curve_plot"
             ]
 
             wandb_table = wandb.Table(data=log_data, columns=table_columns)
