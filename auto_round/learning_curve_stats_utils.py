@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import pandas as pd
 
 
-def calculate_convergence_iter(loss_values, std_fraction=0.1, window=5, consecutive_iters=5):
+def calculate_convergence_iter(loss_values, std_fraction=0.1, window=5, consecutive_iters=10):
     """
     Calculate the convergence iter for a given list of loss values with a dynamic threshold.
 
@@ -50,8 +50,9 @@ def calculate_average_absolute_change(loss_values, window=5):
     
     # Calculate the absolute change in loss values
     abs_change = np.abs(np.diff(moving_avg))
+    avg_abs_change = np.mean(abs_change)
     
-    return abs_change
+    return avg_abs_change
 
 
 def calculate_slope(loss_values, last_iter: int = -1, window: int = 5):
