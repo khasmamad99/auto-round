@@ -18,6 +18,7 @@ import time
 from typing import Optional, Union
 import os
 import io
+import shutil
 
 import torch
 import transformers
@@ -1597,7 +1598,7 @@ class AutoRound(object):
                 )
         
                 # delete the checkpoint
-                os.rmdir(output_dir)
+                shutil.rmtree(output_dir)
                 
         if not self.disable_wandb:
             table_columns = [
