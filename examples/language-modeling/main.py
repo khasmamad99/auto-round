@@ -339,6 +339,7 @@ if __name__ == '__main__':
                 f"-w{args.bits}g{args.group_size}"
                 f"-fine_tune_block_idx={args.fine_tune_block_idx}"
                 f"-observe_block_idx={args.observe_block_idx}"
+                f"-lr={args.lr}"
                 f"-lr_scheduler={'none' if not args.enable_lr_scheduler else 'linear_decay'}"
                 f"-iters={args.iters}"
                 f"-nsamples={args.nsamples}"
