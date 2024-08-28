@@ -87,6 +87,8 @@ if __name__ == '__main__':
     parser.add_argument("--num_lookahead_blocks", default=0, type=int, help="num of blocks to look ahead")
     parser.add_argument("--num_observe_blocks", default=0, type=int, help="num of blocks to observe")
     
+    parser.add_argument("--cleanly_separated_lookahead", action='store_true', help="cleanly separated lookahead")
+    
     parser.add_argument("--isolation_experiment_v2", action='store_true', help="isolation experiment v2")
     parser.add_argument("--fine_tune_block_idx", default=0, type=int, help="fine tune block idx")
     parser.add_argument("--observe_block_idx", default=0, type=int, help="observe block idx")
@@ -325,6 +327,7 @@ if __name__ == '__main__':
             run_name = (
                 f"{model_name.split('/')[-1]}"
                 f"-w{args.bits}g{args.group_size}"
+                f"-clean_lkhd={args.cleanly_separated_lookahead}"
                 f"-blcks={args.nblocks}"
                 f"-lkhd_blcks={args.num_lookahead_blocks}"
                 f"-lr={args.lr}"
@@ -359,6 +362,7 @@ if __name__ == '__main__':
     autoround = round(model, tokenizer, model_name, args.bits, args.group_size, sym=args.sym, batch_size=args.train_bs,
                       dataset=args.dataset, seqlen=seqlen, 
                       nblocks=args.nblocks, num_lookahead_blocks=args.num_lookahead_blocks, num_observe_blocks=args.num_observe_blocks,
+                      cleanly_separated_lookahead=args.cleanly_separated_lookahead,
                       isolation_experiment_v2=args.isolation_experiment_v2, fine_tune_block_idx=args.fine_tune_block_idx, observe_block_idx=args.observe_block_idx,
                       attach_loss_block_indices=args.attach_loss_block_indices,
                       iters=args.iters, lr=args.lr, enable_lr_scheduler=args.enable_lr_scheduler, 

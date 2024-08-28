@@ -161,6 +161,7 @@ class AutoRound(object):
             num_lookahead_blocks: int = 0,
             num_observe_blocks: int = 0,
             isolation_experiment_v2: bool = False,
+            cleanly_separated_lookahead: bool = False,
             fine_tune_block_idx: int = 0,
             observe_block_idx: int = 0,
             attach_loss_block_indices: list[int] = [-1],
@@ -190,6 +191,7 @@ class AutoRound(object):
         self.nblocks = nblocks
         self.num_lookahead_blocks = num_lookahead_blocks
         self.num_observe_blocks = num_observe_blocks
+        self.cleanly_separated_lookahead = cleanly_separated_lookahead
         self.isolation_experiment_v2 = isolation_experiment_v2
         self.fine_tune_block_idx = fine_tune_block_idx
         self.observe_block_idx = observe_block_idx
@@ -1296,6 +1298,7 @@ class AutoRound(object):
         dump_info = (
             f"quantized {len(quantized_layer_names)}/{(len(quantized_layer_names) + len(unquantized_layer_names))} "
             f"layers in the block, loss iter 0: {init_loss:.6f} -> iter {best_iter}: {last_loss:.6f}"
+            f", observe block mse: {total_observe_block_mse:.6f}"
         )
         logger.info(dump_info)
         if len(unquantized_layer_names) != 0:
@@ -1367,50 +1370,87 @@ class AutoRound(object):
             elif isinstance(input_others[key], list):
                 for i in range(len(input_others[key])):
                     input_others[key][i].to(tmp_dtype)
+                    
+        if self.cleanly_separated_lookahead: 
+            for substructure_first_block_idx in range(0, len(block_names), self.num_lookahead_blocks + 1):
+                attach_loss_block_idx = substructure_first_block_idx + self.num_lookahead_blocks
+                attach_loss_block_name = block_names[attach_loss_block_idx]
+                attach_loss_block = get_module(model, attach_loss_block_name)
+                attach_loss_block = attach_loss_block.to(device)
+                
+                observe_block_idx = attach_loss_block_idx
+                observe_block_name = block_names[observe_block_idx]
+                observe_block = get_module(model, observe_block_name)
+                observe_block = observe_block.to(device)
+                
+                for fine_tune_block_idx in range(substructure_first_block_idx, substructure_first_block_idx + self.num_lookahead_blocks):
+                    fine_tune_block_name = block_names[fine_tune_block_idx]
+                    fine_tune_block = get_module(model, fine_tune_block_name)
+                    fine_tune_block = fine_tune_block.to(device)
+                    logger.info(f"fine tune block {fine_tune_block_name}")
+                    logger.info(f"attach loss block {attach_loss_block_name}")
+                    logger.info(f"observe block {observe_block_name}")
 
-        for i in range(0, len(block_names), nblocks):
-            fine_tune_block_names = block_names[i: i + nblocks]
-            logger.info(f"fine tune block {fine_tune_block_names}")
-            fine_tune_block = WrapperMultiblock(
-                [get_module(model, fine_tune_block_name) for fine_tune_block_name in fine_tune_block_names]
-            )
-            
-            attach_loss_block_start_idx = i + nblocks
-            attach_loss_block_end_idx = attach_loss_block_start_idx + num_lookahead_blocks
-            attach_loss_block_names = block_names[attach_loss_block_start_idx: attach_loss_block_end_idx]
-            attach_loss_block = WrapperMultiblock(
-                [get_module(model, attach_loss_block_name) for attach_loss_block_name in attach_loss_block_names]
-            )
-            if len(attach_loss_block_names) == 0:
-                attach_loss_block_names = fine_tune_block_names
-            logger.info(f"attach loss block {attach_loss_block_names}") 
-                        
-            observe_block_start_idx = attach_loss_block_end_idx
-            observe_block_end_idx = observe_block_start_idx + num_observe_blocks
-            observe_block_names = block_names[observe_block_start_idx: observe_block_end_idx]
-            observe_block = WrapperMultiblock(
-                [get_module(model, observe_block_name) for observe_block_name in observe_block_names]
-            )
-            if len(observe_block_names) == 0:
-                observe_block_names = attach_loss_block_names
-            logger.info(f"observe block {observe_block_names}") 
-            
-            combined_block = WrapperMultiblock([fine_tune_block, attach_loss_block, observe_block])
-            combined_block = combined_block.to(device)
+                    combined_block = WrapperMultiblock([fine_tune_block, attach_loss_block, observe_block])
+                    combined_block = combined_block.to(device)
 
-            q_input, input_ids, _ = self.quant_block_with_lookahead(
-                combined_block,
-                input_ids,
-                input_others,
-                q_input=q_input,
-                device=device,
-                fine_tune_block_name=format_layer_name(fine_tune_block_names if isinstance(fine_tune_block_names, str) else fine_tune_block_names[-1]),
-                attach_loss_block_name=format_layer_name(attach_loss_block_names if isinstance(attach_loss_block_names, str) else attach_loss_block_names[-1]),
-                observe_block_name=format_layer_name(observe_block_names if isinstance(observe_block_names, str) else observe_block_names[-1]),
-            )
+                    q_input, input_ids, _ = self.quant_block_with_lookahead(
+                        combined_block,
+                        input_ids,
+                        input_others,
+                        q_input=q_input,
+                        device=device,
+                        fine_tune_block_name=fine_tune_block_name,
+                        attach_loss_block_name=attach_loss_block_name,
+                        observe_block_name=observe_block_name,
+                    )
 
-            self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
-            torch.cuda.empty_cache()
+                    self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
+                    torch.cuda.empty_cache()
+        else:
+            for i in range(0, len(block_names), nblocks):
+                fine_tune_block_names = block_names[i: i + nblocks]
+                logger.info(f"fine tune block {fine_tune_block_names}")
+                fine_tune_block = WrapperMultiblock(
+                    [get_module(model, fine_tune_block_name) for fine_tune_block_name in fine_tune_block_names]
+                )
+                
+                attach_loss_block_start_idx = i + nblocks
+                attach_loss_block_end_idx = attach_loss_block_start_idx + num_lookahead_blocks
+                attach_loss_block_names = block_names[attach_loss_block_start_idx: attach_loss_block_end_idx]
+                attach_loss_block = WrapperMultiblock(
+                    [get_module(model, attach_loss_block_name) for attach_loss_block_name in attach_loss_block_names]
+                )
+                if len(attach_loss_block_names) == 0:
+                    attach_loss_block_names = fine_tune_block_names
+                logger.info(f"attach loss block {attach_loss_block_names}") 
+                            
+                observe_block_start_idx = attach_loss_block_end_idx
+                observe_block_end_idx = observe_block_start_idx + num_observe_blocks
+                observe_block_names = block_names[observe_block_start_idx: observe_block_end_idx]
+                observe_block = WrapperMultiblock(
+                    [get_module(model, observe_block_name) for observe_block_name in observe_block_names]
+                )
+                if len(observe_block_names) == 0:
+                    observe_block_names = attach_loss_block_names
+                logger.info(f"observe block {observe_block_names}") 
+                
+                combined_block = WrapperMultiblock([fine_tune_block, attach_loss_block, observe_block])
+                combined_block = combined_block.to(device)
+
+                q_input, input_ids, _ = self.quant_block_with_lookahead(
+                    combined_block,
+                    input_ids,
+                    input_others,
+                    q_input=q_input,
+                    device=device,
+                    fine_tune_block_name=format_layer_name(fine_tune_block_names if isinstance(fine_tune_block_names, str) else fine_tune_block_names[-1]),
+                    attach_loss_block_name=format_layer_name(attach_loss_block_names if isinstance(attach_loss_block_names, str) else attach_loss_block_names[-1]),
+                    observe_block_name=format_layer_name(observe_block_names if isinstance(observe_block_names, str) else observe_block_names[-1]),
+                )
+
+                self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
+                torch.cuda.empty_cache()
 
         del q_input
         del input_ids
