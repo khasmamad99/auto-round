@@ -1380,15 +1380,22 @@ class AutoRound(object):
                 attach_loss_block = get_module(model, attach_loss_block_name)
                 attach_loss_block = attach_loss_block.to(device)
                 
-                observe_block_idx = attach_loss_block_idx
-                observe_block_name = block_names[observe_block_idx]
-                observe_block = get_module(model, observe_block_name)
+                # observe_block is the same as attach_loss_block
+                observe_block_name = attach_loss_block_name
+                observe_block = WrapperMultiblock([])  # observe_block should not change the output of the attach_loss_block
                 observe_block = observe_block.to(device)
                 
                 for fine_tune_block_idx in range(substructure_first_block_idx, substructure_first_block_idx + self.num_lookahead_blocks + 1):
-                    fine_tune_block_name = block_names[fine_tune_block_idx]
-                    fine_tune_block = get_module(model, fine_tune_block_name)
-                    fine_tune_block = fine_tune_block.to(device)
+                    if fine_tune_block_idx == attach_loss_block_idx:
+                        fine_tune_block_name = attach_loss_block_name
+                        fine_tune_block = attach_loss_block
+                        attach_loss_block = WrapperMultiblock([])  # attach_loss_block should not change the output of the fine_tune_block
+                        attach_loss_block = attach_loss_block.to(device)
+                    else:
+                        fine_tune_block_name = block_names[fine_tune_block_idx]
+                        fine_tune_block = get_module(model, fine_tune_block_name)
+                        fine_tune_block = fine_tune_block.to(device)
+                        
                     logger.info(f"fine tune block {fine_tune_block_name}")
                     logger.info(f"attach loss block {attach_loss_block_name}")
                     logger.info(f"observe block {observe_block_name}")
