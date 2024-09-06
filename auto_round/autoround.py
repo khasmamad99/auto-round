@@ -1385,7 +1385,7 @@ class AutoRound(object):
                 observe_block = get_module(model, observe_block_name)
                 observe_block = observe_block.to(device)
                 
-                for fine_tune_block_idx in range(substructure_first_block_idx, substructure_first_block_idx + self.num_lookahead_blocks):
+                for fine_tune_block_idx in range(substructure_first_block_idx, substructure_first_block_idx + self.num_lookahead_blocks + 1):
                     fine_tune_block_name = block_names[fine_tune_block_idx]
                     fine_tune_block = get_module(model, fine_tune_block_name)
                     fine_tune_block = fine_tune_block.to(device)
