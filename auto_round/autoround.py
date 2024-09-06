@@ -263,6 +263,8 @@ class AutoRound(object):
         assert self.group_size == -1 or self.group_size >= 1, "only supports positive group_size or -1(per channel)"
         assert self.act_group_size == -1 or self.act_group_size >= 1,\
             "only supports positive group_size or -1(per channel)"
+        if self.cleanly_separated_lookahead:
+            assert self.num_lookahead_blocks > 0, "num_lookahead_blocks must be > 0 when cleanly_separated_lookahead is True"
         assert self.num_lookahead_blocks >= 0, "num_lookahead_blocks must be non-negative"
         assert self.num_observe_blocks >= 0, "num_observe_blocks must be non-negative"
         assert self.fine_tune_block_idx <= self.observe_block_idx, (
