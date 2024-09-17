@@ -1375,7 +1375,7 @@ class AutoRound(object):
                     
         if self.cleanly_separated_lookahead: 
             for substructure_first_block_idx in range(0, len(block_names), self.num_lookahead_blocks + 1):
-                attach_loss_block_idx = substructure_first_block_idx + self.num_lookahead_blocks
+                attach_loss_block_idx = min(substructure_first_block_idx + self.num_lookahead_blocks, len(block_names) - 1)
                 attach_loss_block_name = block_names[attach_loss_block_idx]
                 attach_loss_block = get_module(model, attach_loss_block_name)
                 attach_loss_block = attach_loss_block.to(device)
@@ -1385,7 +1385,7 @@ class AutoRound(object):
                 observe_block = WrapperMultiblock([])  # observe_block should not change the output of the attach_loss_block
                 observe_block = observe_block.to(device)
                 
-                for fine_tune_block_idx in range(substructure_first_block_idx, substructure_first_block_idx + self.num_lookahead_blocks + 1):
+                for fine_tune_block_idx in range(substructure_first_block_idx, attach_loss_block_idx + 1):
                     if fine_tune_block_idx == attach_loss_block_idx:
                         fine_tune_block_name = attach_loss_block_name
                         fine_tune_block = attach_loss_block
