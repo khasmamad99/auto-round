@@ -7,8 +7,7 @@ python3 main.py \
     --iters 1000 \
     --nblocks 2 \
     --num_lookahead_blocks 0 \
-    --tasks wikitext \
-    --low_gpu_mem_usage
+    --tasks wikitext
 
 python3 main.py \
     --model_name facebook/opt-2.7b  \
@@ -19,8 +18,7 @@ python3 main.py \
     --iters 1000 \
     --nblocks 3 \
     --num_lookahead_blocks 0 \
-    --tasks wikitext \
-    --low_gpu_mem_usage
+    --tasks wikitext
 
 python3 main.py \
     --model_name facebook/opt-2.7b  \
