@@ -10,7 +10,7 @@ python3 main.py \
     --num_lookahead_blocks 5 \
     --tasks wikitext \
     --low_gpu_mem_usage \
-    --wandb_project_name khas-thesis-autoround-complete-model &
+    --wandb_project_name khas-thesis-autoround-complete-model
 
 python3 main.py \
     --model_name facebook/opt-125m  \
@@ -26,8 +26,6 @@ python3 main.py \
     --low_gpu_mem_usage \
     --wandb_project_name khas-thesis-autoround-complete-model
 
-wait
-
 python3 main.py \
     --model_name facebook/opt-125m  \
     --bits 4 \
@@ -40,7 +38,7 @@ python3 main.py \
     --num_lookahead_blocks 7 \
     --tasks wikitext \
     --low_gpu_mem_usage \
-    --wandb_project_name khas-thesis-autoround-complete-model &
+    --wandb_project_name khas-thesis-autoround-complete-model
 
 python3 main.py \
     --model_name facebook/opt-125m  \
@@ -55,8 +53,6 @@ python3 main.py \
     --tasks wikitext \
     --low_gpu_mem_usage \
     --wandb_project_name khas-thesis-autoround-complete-model
-
-wait
 
 python3 main.py \
     --model_name facebook/opt-125m  \
