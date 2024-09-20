@@ -128,6 +128,7 @@ def get_c4_dataset(tokenizer, seqlen, dataset_name="allenai/c4", split=None, see
         "en",
         data_files={"train": "en/c4-train.00000-of-01024.json.gz"},
         split=split,
+        verification_mode="no_checks",
     )
     c4_dataset = c4_dataset.shuffle(seed=seed)
     
