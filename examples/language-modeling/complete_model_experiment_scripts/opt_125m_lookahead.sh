@@ -3,8 +3,9 @@ python3 main.py \
     --bits 4 \
     --group_size 128 \
     --enable_lr_scheduler \
+    --dataset allenai/c4 \
     --nsamples 8192 \
-    --iters 1000 \
+    --iters 10 --disable_wandb \
     --nblocks 1 \
     --num_lookahead_blocks 5 \
     --tasks wikitext \
@@ -16,6 +17,7 @@ python3 main.py \
     --bits 4 \
     --group_size 128 \
     --enable_lr_scheduler \
+    --dataset allenai/c4 \
     --nsamples 8192 \
     --iters 1000 \
     --nblocks 1 \
@@ -31,6 +33,7 @@ python3 main.py \
     --bits 4 \
     --group_size 128 \
     --enable_lr_scheduler \
+    --dataset allenai/c4 \
     --nsamples 8192 \
     --iters 1000 \
     --nblocks 1 \
@@ -44,6 +47,7 @@ python3 main.py \
     --bits 4 \
     --group_size 128 \
     --enable_lr_scheduler \
+    --dataset allenai/c4 \
     --nsamples 8192 \
     --iters 1000 \
     --nblocks 1 \
@@ -59,6 +63,7 @@ python3 main.py \
     --bits 4 \
     --group_size 128 \
     --enable_lr_scheduler \
+    --dataset allenai/c4 \
     --nsamples 8192 \
     --iters 25 --disable_wandb \
     --nblocks 1 \
@@ -73,6 +78,7 @@ python3 main.py \
     --bits 4 \
     --group_size 128 \
     --enable_lr_scheduler \
+    --dataset allenai/c4 \
     --nsamples 8192 \
     --iters 25 --disable_wandb \
     --nblocks 1 \
@@ -87,6 +93,7 @@ python3 main.py \
     --bits 4 \
     --group_size 128 \
     --enable_lr_scheduler \
+    --dataset allenai/c4 \
     --nsamples 8192 \
     --iters 1000 \
     --nblocks 1 \

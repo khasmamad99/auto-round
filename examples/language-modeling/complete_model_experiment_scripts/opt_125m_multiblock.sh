@@ -32,6 +32,7 @@ python3 main.py \
     --group_size 128 \
     --enable_lr_scheduler \
     --nsamples 8192 \
+    --dataset allenai/c4 \
     --iters 1000 \
     --nblocks 8 \
     --num_lookahead_blocks 0 \
@@ -60,7 +61,7 @@ python3 main.py \
     --group_size 128 \
     --enable_lr_scheduler \
     --nsamples 8192 \
-    --iters 25 --disable_wandb \
+    --iters 1000 \
     --nblocks 10 \
     --num_lookahead_blocks 0 \
     --tasks wikitext \
@@ -74,7 +75,7 @@ python3 main.py \
     --group_size 128 \
     --enable_lr_scheduler \
     --nsamples 8192 \
-    --iters 25 --disable_wandb \
+    --iters 1000 \
     --nblocks 11 \
     --num_lookahead_blocks 0 \
     --tasks wikitext \
