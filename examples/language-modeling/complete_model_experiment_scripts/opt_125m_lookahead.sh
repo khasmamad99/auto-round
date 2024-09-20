@@ -5,7 +5,7 @@ python3 main.py \
     --enable_lr_scheduler \
     --dataset allenai/c4 \
     --nsamples 8192 \
-    --iters 10 --disable_wandb \
+    --iters 1000 \
     --nblocks 1 \
     --num_lookahead_blocks 5 \
     --tasks wikitext \
