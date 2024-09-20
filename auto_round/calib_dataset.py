@@ -101,6 +101,43 @@ def get_pile_dataset(tokenizer, seqlen, dataset_name="NeelNanda/pile-10k", split
     return calib_dataset
 
 
+@register_dataset("allenai/c4")
+def get_c4_dataset(tokenizer, seqlen, dataset_name="allenai/c4", split=None, seed=42, apply_template=False):
+    """Returns a dataloader for the specified dataset and split.
+
+    Args:
+    tokenizer: The tokenizer to be used for tokenization.
+    seqlen: The maximum sequence length.
+    data_name: The name of the dataset.
+    split: The data split to be used (e.g., "train", "test").
+    seed: The random seed for shuffling the dataset.
+    apply_template: Whether to apply chat template in tokenization.
+
+    Returns:
+    A dataloader for the specified dataset and split, using the provided tokenizer and sequence length.
+    """
+    from datasets import load_dataset
+
+    # Default to "train" split if none is specified
+    split = split or "train"
+    tokenizer_function = get_tokenizer_function(tokenizer, seqlen, apply_template=apply_template)
+
+    # Load and shuffle the dataset
+    c4_dataset = load_dataset(
+        dataset_name, 
+        "en",
+        data_files={"train": "en/c4-train.00000-of-01024.json.gz"},
+        split=split,
+    )
+    c4_dataset = c4_dataset.shuffle(seed=seed)
+    
+    # Tokenize the dataset
+    c4_dataset = c4_dataset.map(tokenizer_function, batched=True)
+    
+    return c4_dataset
+
+
+
 @register_dataset("madao33/new-title-chinese")
 def get_new_chinese_title_dataset(
         tokenizer, 
