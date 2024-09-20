@@ -155,6 +155,7 @@ if __name__ == '__main__':
     parser.add_argument("--act_bits", default=32, type=int,
                         help="activation bits")
     parser.add_argument("--use_best_mse", action='store_true', default=False)
+    parser.add_argument("--wandb_project_name", default=WANDB_PROJECT_NAME, type=str)
     parser.add_argument("--disable_wandb", action='store_true', default=False)
     parser.add_argument("--wandb_offline", action='store_true', default=False)
     parser.add_argument("--lm_eval_random_seed", default=0, type=int)
@@ -351,7 +352,7 @@ if __name__ == '__main__':
         
         run = wandb.init(
             config=vars(args),
-            project=WANDB_PROJECT_NAME if not args.isolation_experiment_v2 else WANDB_PROJECT_NAME_ISOLATION_EXPERIMENT_V2,
+            project=args.wandb_project_name,
             entity=WANDB_ENTITY,
             name=run_name,
             mode="offline" if args.wandb_offline else "online",
