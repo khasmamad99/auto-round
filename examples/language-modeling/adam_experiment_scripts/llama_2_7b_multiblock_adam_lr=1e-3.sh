@@ -47,7 +47,7 @@ python3 main.py \
     --lr 1e-3 \
     --enable_lr_scheduler \
     --nsamples 512 \
-    --iters 10 --disable_wandb \
+    --iters 1000 \
     --adam \
     --nblocks 5 \
     --num_lookahead_blocks 0 \
