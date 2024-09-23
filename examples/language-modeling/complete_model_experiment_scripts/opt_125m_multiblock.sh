@@ -91,7 +91,7 @@ python3 main.py \
     --enable_lr_scheduler \
     --dataset allenai/c4 \
     --nsamples 8192 \
-    --iters 10 --disable_wandb \
+    --iters 1000 \
     --nblocks 12 \
     --num_lookahead_blocks 0 \
     --tasks wikitext \
