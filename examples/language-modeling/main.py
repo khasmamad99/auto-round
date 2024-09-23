@@ -336,6 +336,7 @@ if __name__ == '__main__':
                 f"-iters={args.iters}"
                 f"-nsamples={args.nsamples}"
                 f"-optimizer={'adam' if args.adam else 'signed_sgd'}"
+                f"-seed={args.seed}"
             )
         else:
             run_name = (
@@ -348,6 +349,7 @@ if __name__ == '__main__':
                 f"-iters={args.iters}"
                 f"-nsamples={args.nsamples}"
                 f"-optimizer={'adam' if args.adam else 'signed_sgd'}"
+                f"-seed={args.seed}"
             )
         
         run = wandb.init(
