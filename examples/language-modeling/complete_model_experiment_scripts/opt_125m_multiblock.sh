@@ -4,7 +4,7 @@ python3 main.py \
     --group_size 128 \
     --enable_lr_scheduler \
     --dataset allenai/c4 \
-    --nsamples 8192 \
+    --nsamples 2048 \
     --iters 1000 \
     --nblocks 6 \
     --num_lookahead_blocks 0 \
@@ -18,7 +18,7 @@ python3 main.py \
     --group_size 128 \
     --enable_lr_scheduler \
     --dataset allenai/c4 \
-    --nsamples 8192 \
+    --nsamples 2048 \
     --iters 1000 \
     --nblocks 7 \
     --num_lookahead_blocks 0 \
@@ -32,7 +32,7 @@ python3 main.py \
     --group_size 128 \
     --enable_lr_scheduler \
     --dataset allenai/c4 \
-    --nsamples 8192 \
+    --nsamples 2048 \
     --iters 1000 \
     --nblocks 8 \
     --num_lookahead_blocks 0 \
@@ -46,7 +46,7 @@ python3 main.py \
     --group_size 128 \
     --enable_lr_scheduler \
     --dataset allenai/c4 \
-    --nsamples 8192 \
+    --nsamples 2048 \
     --iters 1000 \
     --nblocks 9 \
     --num_lookahead_blocks 0 \
@@ -60,7 +60,7 @@ python3 main.py \
     --group_size 128 \
     --enable_lr_scheduler \
     --dataset allenai/c4 \
-    --nsamples 8192 \
+    --nsamples 2048 \
     --iters 1000 \
     --nblocks 10 \
     --num_lookahead_blocks 0 \
@@ -75,7 +75,7 @@ python3 main.py \
     --group_size 128 \
     --enable_lr_scheduler \
     --dataset allenai/c4 \
-    --nsamples 8192 \
+    --nsamples 2048 \
     --iters 1000 \
     --nblocks 11 \
     --num_lookahead_blocks 0 \
@@ -90,7 +90,7 @@ python3 main.py \
     --group_size 128 \
     --enable_lr_scheduler \
     --dataset allenai/c4 \
-    --nsamples 8192 \
+    --nsamples 2048 \
     --iters 1000 \
     --nblocks 12 \
     --num_lookahead_blocks 0 \
