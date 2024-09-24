@@ -116,7 +116,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--tasks",
                         default="lambada_openai,hellaswag,winogrande,piqa,mmlu,wikitext,truthfulqa_mc1," \
-                                "truthfulqa_mc2,openbookqa,boolq,rte,arc_easy,arc_challenge",
+                                "truthfulqa_mc2,openbookqa,boolq,rte,arc_easy,arc_challenge,wikitext2",
                         help="lm-eval tasks for lm_eval version 0.4")
 
     parser.add_argument("--output_dir", default=None, type=str,
@@ -497,6 +497,7 @@ if __name__ == '__main__':
         if args.act_bits <= 8:
             user_model = model.to(device_str)
 
+        model_args += f",trust_remote_code=True"
         if len(lm_eval_harness_tasks) > 0:
             lm_eval_harness_results = simple_evaluate(model="hf", model_args=model_args,
                                 tasks=lm_eval_harness_tasks,
