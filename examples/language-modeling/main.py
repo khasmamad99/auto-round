@@ -391,7 +391,7 @@ if __name__ == '__main__':
     if "cpu" not in device_str:
         torch.cuda.empty_cache()
 
-    output_dir = os.path.join(args.output_dir, run_name)
+    output_dir = os.path.join(args.output_dir, run_name.replace("=", "::"))
     export_dir = output_dir + "_export"
 
     deployment_device = args.deployment_device.split(',')
