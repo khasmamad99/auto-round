@@ -120,7 +120,7 @@ if __name__ == '__main__':
                         help="lm-eval tasks for lm_eval version 0.4")
 
     parser.add_argument("--output_dir", default=None, type=str,
-                        help="Where to store the final model. If None, it will default to `wandb_project_name`")
+                        help="Where to store the final model. If None, it will default to tmp_autoround/`wandb_project_name`")
 
     parser.add_argument("--disable_eval", action='store_true',
                         help="Whether to do lmeval evaluation.")
@@ -212,7 +212,7 @@ if __name__ == '__main__':
     torch_device = torch.device(device_str)
 
     if args.output_dir is None:
-        args.output_dir = args.wandb_project_name
+        args.output_dir = os.path.join("tmp_autoround", args.wandb_project_name)
     
     is_glm = bool(re.search("chatglm", model_name.lower()))
     low_cpu_mem_usage = False
