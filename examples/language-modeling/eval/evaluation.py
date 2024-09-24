@@ -403,7 +403,19 @@ def eval_model(model_path, tasks=["lambada_openai", "hellaswag", "winogrande", "
             continue
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(model_path, use_fast=False, trust_remote_code=True)
-    model = lm.model
+    if lm is None:
+        model = transformers.AutoModelForCausalLM.from_pretrained(
+            model_path, 
+            # torch_dtype=torch.float16, 
+            # cache_dir=cache_dir, 
+            # low_cpu_mem_usage=True, 
+            # device_map="auto",
+            # token=os.environ["HF_TOKEN"],
+            # attn_implementation="eager",
+            # accelerator="auto",
+        )
+    else:
+        model = lm.model
     # for external tasks
     # maybe adjust for specific model
     # if hasattr(lm.model.config, "max_position_embeddings"):
@@ -411,13 +423,13 @@ def eval_model(model_path, tasks=["lambada_openai", "hellaswag", "winogrande", "
     # else:
     #     ## for llama-1, opt
     #     lm.model.seqlen = 2048
-
-    # if "opt" in model_name:
-    #     seqlen = model.config.max_position_embeddings
-    #     model.seqlen = model.config.max_position_embeddings
-    # else:
-    #     seqlen = 2048
-    #     model.seqlen = seqlen
+    model.to(device)
+    if "opt" in model_path:
+        seqlen = model.config.max_position_embeddings
+        model.seqlen = model.config.max_position_embeddings
+    else:
+        seqlen = 2048
+        model.seqlen = seqlen
 
     model.seqlen = 2048
     from eval.utils import get_loaders, eval_ppl_same_with_gptq
@@ -484,6 +496,7 @@ def eval_model(model_path, tasks=["lambada_openai", "hellaswag", "winogrande", "
     import pandas as pd
     df = pd.DataFrame(data=new_dict, index=[0])
     df.to_excel(excel_file)
+    return results
 
 
 if __name__ == "__main__":

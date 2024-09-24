@@ -468,7 +468,7 @@ if __name__ == '__main__':
         excel_name = f"{output_dir}_result.xlsx"
         output_dir += "/"
         print(excel_name, flush=True)
-        eval_model(model_path=output_dir, tasks=tasks, dtype=dtype, limit=None,
+        res = eval_model(model_path=output_dir, tasks=tasks, dtype=dtype, limit=None,
                    eval_bs=args.eval_bs, use_accelerate=args.low_gpu_mem_usage,
                    device=torch_device, excel_file=excel_name)
 
@@ -496,7 +496,11 @@ if __name__ == '__main__':
         
         if not args.disable_wandb:
             from auto_round.learning_curve_stats_utils import make_pandas_dataframe_from_lm_eval_results
-            results_df = make_pandas_dataframe_from_lm_eval_results(res)
+            if lm_eval_version == "0.4.2":
+                results_df = make_pandas_dataframe_from_lm_eval_results(res)
+            else:
+                import pandas as pd
+                results_df = pd.DataFrame([res])
             
             results_df.insert(0, "run_name", run_name)
             results_df.insert(1, "model_name", model_name)
