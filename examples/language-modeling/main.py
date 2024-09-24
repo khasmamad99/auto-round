@@ -480,7 +480,7 @@ if __name__ == '__main__':
         from eval.evaluation import EXT_TASKS
         
         external_tasks = []
-        for task in args.tasks.split(","):
+        for task in tasks:
             if task in EXT_TASKS:
                 external_tasks.append(task)
 
@@ -494,7 +494,7 @@ if __name__ == '__main__':
         if args.act_bits <= 8:
             user_model = model.to(device_str)
 
-        if len(args.tasks.split(",")) > 0:
+        if len(tasks) > 0:
             lm_eval_harness_results = simple_evaluate(model="hf", model_args=model_args,
                                 tasks=tasks,
                                 batch_size=args.eval_bs, user_model=user_model,
