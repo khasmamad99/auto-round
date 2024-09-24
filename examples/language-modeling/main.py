@@ -477,6 +477,12 @@ if __name__ == '__main__':
 
     if not args.disable_eval and lm_eval_version == "0.4.2":
         from eval_042.evaluation import simple_evaluate
+        from eval.evaluation import EXT_TASKS
+        
+        external_tasks = []
+        for task in args.tasks.split(","):
+            if task in EXT_TASKS:
+                external_tasks.append(task)
 
         if 'gpu' in deployment_device or len(gpu_formats) > 0:
             model_args = f"pretrained={eval_folder}"
@@ -488,23 +494,28 @@ if __name__ == '__main__':
         if args.act_bits <= 8:
             user_model = model.to(device_str)
 
-        res = simple_evaluate(model="hf", model_args=model_args,
-                              tasks=tasks,
-                              batch_size=args.eval_bs, user_model=user_model,
-                              random_seed=args.lm_eval_random_seed,
-                              numpy_random_seed=args.lm_eval_numpy_random_seed,
-                              torch_random_seed=args.lm_eval_torch_random_seed,
-                            )
-        from lm_eval.utils import make_table
+        if len(args.tasks.split(",")) > 0:
+            lm_eval_harness_results = simple_evaluate(model="hf", model_args=model_args,
+                                tasks=tasks,
+                                batch_size=args.eval_bs, user_model=user_model,
+                                random_seed=args.lm_eval_random_seed,
+                                numpy_random_seed=args.lm_eval_numpy_random_seed,
+                                torch_random_seed=args.lm_eval_torch_random_seed,
+                                )
+        else:
+            lm_eval_harness_results = {}
+        
+        if len(external_tasks) > 0:
+            external_results = eval_model(model_path=output_dir, tasks=tasks, dtype=dtype, limit=None,
+                   eval_bs=args.eval_bs, use_accelerate=args.low_gpu_mem_usage,
+                   device=torch_device, excel_file=excel_name)
+        else:
+            external_results = {}
         
         if not args.disable_wandb:
             from auto_round.learning_curve_stats_utils import make_pandas_dataframe_from_lm_eval_results
-            if lm_eval_version == "0.4.2":
-                results_df = make_pandas_dataframe_from_lm_eval_results(res)
-            else:
-                import pandas as pd
-                results_df = pd.DataFrame([res])
             
+            results_df = make_pandas_dataframe_from_lm_eval_results(lm_eval_harness_results)    
             results_df.insert(0, "run_name", run_name)
             results_df.insert(1, "model_name", model_name)
             results_df.insert(5, "num_blocks", args.nblocks)
@@ -514,6 +525,11 @@ if __name__ == '__main__':
             results_df.insert(9, "num_iters", args.iters)
             results_df.insert(10, "num_fine_tuning_samples", args.nsamples)
             results_df.insert(11, "optimizer", "adam" if args.adam else "signed_sgd")
+            
+            for task, result in external_results.items():
+                if task == "wikitext2":
+                    task = "gptq_wikitext2"
+                results_df.insert(12, f"{task}_ppl", result)
             
             wandb_table = wandb.Table(dataframe=results_df)
             wandb.log({f"lm_eval_{lm_eval_version.replace('.','')}_results": wandb_table})
@@ -527,6 +543,7 @@ if __name__ == '__main__':
                 f"lm_eval_configs": res["configs"],
             })
             
-
-        print(make_table(res))
+        from lm_eval.utils import make_table
+        print(make_table(lm_eval_harness_results))
+        print(external_results)
         
