@@ -480,9 +480,12 @@ if __name__ == '__main__':
         from eval.evaluation import EXT_TASKS
         
         external_tasks = []
+        lm_eval_harness_tasks = []
         for task in tasks:
             if task in EXT_TASKS:
                 external_tasks.append(task)
+            else:
+                lm_eval_harness_tasks.append(task)
 
         if 'gpu' in deployment_device or len(gpu_formats) > 0:
             model_args = f"pretrained={eval_folder}"
@@ -494,9 +497,9 @@ if __name__ == '__main__':
         if args.act_bits <= 8:
             user_model = model.to(device_str)
 
-        if len(tasks) > 0:
+        if len(lm_eval_harness_tasks) > 0:
             lm_eval_harness_results = simple_evaluate(model="hf", model_args=model_args,
-                                tasks=tasks,
+                                tasks=lm_eval_harness_tasks,
                                 batch_size=args.eval_bs, user_model=user_model,
                                 random_seed=args.lm_eval_random_seed,
                                 numpy_random_seed=args.lm_eval_numpy_random_seed,
@@ -506,7 +509,8 @@ if __name__ == '__main__':
             lm_eval_harness_results = {}
         
         if len(external_tasks) > 0:
-            external_results = eval_model(model_path=output_dir, tasks=tasks, dtype=dtype, limit=None,
+            excel_name = os.path.join(output_dir, "external_results.xlsx")
+            external_results = eval_model(model_path=output_dir, tasks=external_tasks, dtype=dtype, limit=None,
                    eval_bs=args.eval_bs, use_accelerate=args.low_gpu_mem_usage,
                    device=torch_device, excel_file=excel_name)
         else:
@@ -534,13 +538,13 @@ if __name__ == '__main__':
             wandb_table = wandb.Table(dataframe=results_df)
             wandb.log({f"lm_eval_{lm_eval_version.replace('.','')}_results": wandb_table})
             
-            res["configs"]["random_seed"] = args.lm_eval_random_seed
-            res["configs"]["numpy_random_seed"] = args.lm_eval_numpy_random_seed
-            res["configs"]["torch_random_seed"] = args.lm_eval_torch_random_seed
+            lm_eval_harness_results["configs"]["random_seed"] = args.lm_eval_random_seed
+            lm_eval_harness_results["configs"]["numpy_random_seed"] = args.lm_eval_numpy_random_seed
+            lm_eval_harness_results["configs"]["torch_random_seed"] = args.lm_eval_torch_random_seed
             
             run.config.update({
                 "lm_eval_version": lm_eval_version,
-                f"lm_eval_configs": res["configs"],
+                f"lm_eval_configs": lm_eval_harness_results["configs"],
             })
             
         from lm_eval.utils import make_table
