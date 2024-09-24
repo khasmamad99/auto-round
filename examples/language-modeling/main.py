@@ -119,8 +119,8 @@ if __name__ == '__main__':
                                 "truthfulqa_mc2,openbookqa,boolq,rte,arc_easy,arc_challenge",
                         help="lm-eval tasks for lm_eval version 0.4")
 
-    parser.add_argument("--output_dir", default="./tmp_autoround", type=str,
-                        help="Where to store the final model.")
+    parser.add_argument("--output_dir", default=None, type=str,
+                        help="Where to store the final model. If None, it will default to `wandb_project_name`")
 
     parser.add_argument("--disable_eval", action='store_true',
                         help="Whether to do lmeval evaluation.")
@@ -211,6 +211,9 @@ if __name__ == '__main__':
         torch_dtype = torch.bfloat16
     torch_device = torch.device(device_str)
 
+    if args.output_dir is None:
+        args.output_dir = args.wandb_project_name
+    
     is_glm = bool(re.search("chatglm", model_name.lower()))
     low_cpu_mem_usage = False
     model_cls = AutoModel if is_glm else AutoModelForCausalLM
@@ -323,35 +326,35 @@ if __name__ == '__main__':
         print(f"warning, low_gpu_mem_usage=False is strongly recommended if the whole model could be loaded to "
               f"gpu")
 
-    if not args.disable_wandb:
-        if not args.isolation_experiment_v2:
-            run_name = (
-                f"{model_name.split('/')[-1]}"
-                f"-w{args.bits}g{args.group_size}"
-                f"-clean_lkhd={args.cleanly_separated_lookahead}"
-                f"-blcks={args.nblocks}"
-                f"-lkhd_blcks={args.num_lookahead_blocks}"
-                f"-lr={args.lr if args.lr is not None else 1.0/args.iters}"
-                f"-lr_scheduler={'none' if not args.enable_lr_scheduler else 'linear_decay'}"
-                f"-iters={args.iters}"
-                f"-nsamples={args.nsamples}"
-                f"-optimizer={'adam' if args.adam else 'signed_sgd'}"
-                f"-seed={args.seed}"
-            )
-        else:
-            run_name = (
-                f"{model_name.split('/')[-1]}"
-                f"-w{args.bits}g{args.group_size}"
-                f"-fine_tune_block_idx={args.fine_tune_block_idx}"
-                f"-observe_block_idx={args.observe_block_idx}"
-                f"-lr={args.lr if args.lr is not None else 1.0/args.iters}"
-                f"-lr_scheduler={'none' if not args.enable_lr_scheduler else 'linear_decay'}"
-                f"-iters={args.iters}"
-                f"-nsamples={args.nsamples}"
-                f"-optimizer={'adam' if args.adam else 'signed_sgd'}"
-                f"-seed={args.seed}"
-            )
+    if not args.isolation_experiment_v2:
+        run_name = (
+            f"{model_name.split('/')[-1]}"
+            f"-w{args.bits}g{args.group_size}"
+            f"-clean_lkhd={args.cleanly_separated_lookahead}"
+            f"-blcks={args.nblocks}"
+            f"-lkhd_blcks={args.num_lookahead_blocks}"
+            f"-lr={args.lr if args.lr is not None else 1.0/args.iters}"
+            f"-lr_scheduler={'none' if not args.enable_lr_scheduler else 'linear_decay'}"
+            f"-iters={args.iters}"
+            f"-nsamples={args.nsamples}"
+            f"-optimizer={'adam' if args.adam else 'signed_sgd'}"
+            f"-seed={args.seed}"
+        )
+    else:
+        run_name = (
+            f"{model_name.split('/')[-1]}"
+            f"-w{args.bits}g{args.group_size}"
+            f"-fine_tune_block_idx={args.fine_tune_block_idx}"
+            f"-observe_block_idx={args.observe_block_idx}"
+            f"-lr={args.lr if args.lr is not None else 1.0/args.iters}"
+            f"-lr_scheduler={'none' if not args.enable_lr_scheduler else 'linear_decay'}"
+            f"-iters={args.iters}"
+            f"-nsamples={args.nsamples}"
+            f"-optimizer={'adam' if args.adam else 'signed_sgd'}"
+            f"-seed={args.seed}"
+        )
         
+    if not args.disable_wandb:
         run = wandb.init(
             config=vars(args),
             project=args.wandb_project_name,
@@ -388,8 +391,8 @@ if __name__ == '__main__':
     if "cpu" not in device_str:
         torch.cuda.empty_cache()
 
-    export_dir = args.output_dir + "/" + model_name.split('/')[-1] + f"-autoround-w{args.bits}g{args.group_size}"
-    output_dir = args.output_dir + "/" + model_name.split('/')[-1] + f"-autoround-w{args.bits}g{args.group_size}-qdq"
+    output_dir = os.path.join(args.output_dir, run_name)
+    export_dir = output_dir + "_export"
 
     deployment_device = args.deployment_device.split(',')
     gpu_formats = []
