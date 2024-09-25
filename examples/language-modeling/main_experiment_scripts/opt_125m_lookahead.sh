@@ -57,5 +57,4 @@ python3 main.py \
     --iters 1000 \
     --nblocks 1 \
     --num_lookahead_blocks 4 \
-    --tasks wikitext &
-
+    --tasks wikitext
