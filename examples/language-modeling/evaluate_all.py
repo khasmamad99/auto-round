@@ -8,7 +8,10 @@ from eval_042.evaluation import simple_evaluate as lm_eval_evaluate
 from eval.evaluation import EXT_TASKS, eval_model as gptq_evaluate
 
 
-def clean_lm_eval_results(lm_eval_results):
+
+
+
+def clean_lm_eval_results(lm_eval_results, tasks: list[str]):
     """Clean up the results from lm-eval."""
     cleaned_results = {}
     
@@ -17,19 +20,27 @@ def clean_lm_eval_results(lm_eval_results):
         if "alias" in dic:
             k = dic.pop("alias")
             
+        if k not in tasks:
+            continue
+            
         for (mf), v in dic.items():
             m, _, f = mf.partition(",")
             if m.endswith("_stderr"):
                 continue
             
             v = float(v)
-            if m == "acc" or m == "word_perplexity":
-                cleaned_results[k] = v
-                
             if m == "acc":
+                if k == "openbookqa":  # OpenBookQA is flaky and sometimes reports 1000% accuracy
+                    if v > 100:
+                        v = v / 10
+                else:
+                    v = v * 100
                 accuracies.append(v)
+                cleaned_results[k] = round(v, 2)
+            elif m == "word_perplexity":
+                cleaned_results[k] = round(v, 2)
     
-    avg_accuracy = sum(accuracies) / len(accuracies)
+    avg_accuracy = round(sum(accuracies) / len(accuracies), 2)
     cleaned_results["avg_accuracy"] = avg_accuracy
     return cleaned_results
 
@@ -54,7 +65,12 @@ def evaluate(
     tasks = tasks.split(",")
     lm_eval_evaluate_tasks = [task for task in tasks if task not in EXT_TASKS]
     gptq_evaluate_tasks = [task for task in tasks if task in EXT_TASKS]
-    
+    if not os.path.exists(model_path):
+        output_dir = os.path.join("fp_results", model_path)
+        os.makedirs(output_dir, exist_ok=True)
+    else:
+        output_dir = model_path
+        
     results = {}
     model_args = f"pretrained={model_path},trust_remote_code=True"
     if len(lm_eval_evaluate_tasks) > 0:
@@ -65,7 +81,7 @@ def evaluate(
             batch_size=batch_size,
             random_seed=seed,
         )
-        lm_eval_results_write_path = os.path.join(model_path, "lm_eval_raw_results.json")
+        lm_eval_results_write_path = os.path.join(output_dir, "lm_eval_raw_results.json")
         with open(lm_eval_results_write_path, "w") as f:
             json.dump(lm_eval_results, f)
         
@@ -82,7 +98,7 @@ def evaluate(
             seed=seed,
         )
         
-        gptq_results_write_path = os.path.join(model_path, "gptq_raw_results.json")
+        gptq_results_write_path = os.path.join(output_dir, "gptq_raw_results.json")
         with open(gptq_results_write_path, "w") as f:
             json.dump(gptq_results, f)
         
