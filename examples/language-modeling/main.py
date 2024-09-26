@@ -507,6 +507,10 @@ if __name__ == '__main__':
             tasks=args.tasks,
             seed=args.seed,
         )
+        eval_results.insert(0, "model_name", model_name)
+        eval_results.insert(1, "num_blocks", args.nblocks)
+        eval_results.insert(2, "block_step_size", args.block_step_size)
+        eval_results.insert(3, "num_lookahead_blocks", args.num_lookahead_blocks)
         
         if not args.disable_wandb:
             from auto_round.learning_curve_stats_utils import make_pandas_dataframe_from_lm_eval_results
