@@ -30,11 +30,9 @@ def clean_lm_eval_results(lm_eval_results, tasks: list[str]):
             
             v = float(v)
             if m == "acc":
-                if k == "openbookqa":  # OpenBookQA is flaky and sometimes reports 1000% accuracy
-                    if v > 100:
-                        v = v / 10
-                else:
-                    v = v * 100
+                if k == "openbookqa" and v > 100:  # OpenBookQA is flaky and sometimes reports 1000% accuracy
+                    v = v / 10
+                v = v * 100
                 accuracies.append(v)
                 cleaned_results[k] = round(v, 2)
             elif m == "word_perplexity":
