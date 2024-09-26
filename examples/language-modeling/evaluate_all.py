@@ -120,12 +120,14 @@ if __name__ == "__main__":
     )
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
+    model_paths = args.model_path.split(",")
     
-    results_df = evaluate(
-        model_path=args.model_path,
-        batch_size=args.batch_size,
-        tasks=args.tasks,
-        seed=args.seed,
-    )
-    print(results_df)
+    for model_path in model_paths:
+        results_df = evaluate(
+            model_path=args.model_path,
+            batch_size=args.batch_size,
+            tasks=args.tasks,
+            seed=args.seed,
+        )
+        print(results_df)
     
