@@ -98,7 +98,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
     parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--tasks", type=str, default="lambada_openai,hellaswag,winogrande,piqa,mmlu,wikitext,truthfulqa_mc1,,openbookqa,boolq,rte,arc_easy,arc_challenge,wikitext2,ptb,c4")
+    parser.add_argument(
+        "--tasks", 
+        type=str, 
+        default=(
+            "wikitext2,ptb,c4,wikitext"
+            ",mmlu,lambada_openai,hellaswag,winogrande,piqa,truthfulqa_mc1"
+            ",openbookqa,boolq,rte,arc_easy,arc_challenge"
+        )
+    )
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
     
