@@ -2,6 +2,7 @@ python3 main.py \
     --model_name facebook/opt-6.7b  \
     --bits 4 \
     --group_size 128 \
+    --eval_bs 32 \
     --enable_lr_scheduler \
     --nsamples 512 \
     --iters 1000 \
@@ -13,6 +14,7 @@ python3 main.py \
     --model_name facebook/opt-6.7b  \
     --bits 4 \
     --group_size 128 \
+    --eval_bs 32 \
     --enable_lr_scheduler \
     --nsamples 512 \
     --iters 1000 \
@@ -25,6 +27,7 @@ python3 main.py \
     --model_name facebook/opt-6.7b  \
     --bits 4 \
     --group_size 128 \
+    --eval_bs 32 \
     --enable_lr_scheduler \
     --nsamples 512 \
     --iters 1000 \
@@ -37,6 +40,7 @@ python3 main.py \
     --model_name facebook/opt-6.7b  \
     --bits 4 \
     --group_size 128 \
+    --eval_bs 32 \
     --enable_lr_scheduler \
     --nsamples 512 \
     --iters 1000 \
@@ -49,6 +53,7 @@ python3 main.py \
 #     --model_name facebook/opt-6.7b  \
 #     --bits 4 \
 #     --group_size 128 \
+#     --eval_bs 32 \
 #     --enable_lr_scheduler \
 #     --nsamples 512 \
 #     --iters 1000 \
