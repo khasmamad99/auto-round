@@ -66,7 +66,7 @@ def evaluate(
     lm_eval_evaluate_tasks = [task for task in tasks if task not in EXT_TASKS]
     gptq_evaluate_tasks = [task for task in tasks if task in EXT_TASKS]
     if not os.path.exists(model_path):
-        output_dir = os.path.join("fp_results", model_path)
+        output_dir = os.path.join("tmp_autoround", "fp_results", model_path)
         os.makedirs(output_dir, exist_ok=True)
     else:
         output_dir = model_path
