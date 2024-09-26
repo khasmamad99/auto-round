@@ -85,7 +85,7 @@ def evaluate(
         with open(lm_eval_results_write_path, "w") as f:
             json.dump(lm_eval_results, f)
         
-        cleaned_lm_eval_results = clean_lm_eval_results(lm_eval_results)
+        cleaned_lm_eval_results = clean_lm_eval_results(lm_eval_results, tasks=lm_eval_evaluate_tasks)
         results.update(cleaned_lm_eval_results)
         print(cleaned_lm_eval_results)
         
@@ -107,7 +107,8 @@ def evaluate(
     
     results_df = pd.DataFrame([results])
     print(results_df)
-    results_df.to_csv(os.path.join(model_path, "results.csv"), index=False)
+    results_df.to_csv(os.path.join(output_dir, "results.csv"), index=False)
+    return results_df
         
         
 if __name__ == "__main__":
