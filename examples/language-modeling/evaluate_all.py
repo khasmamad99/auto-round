@@ -86,9 +86,7 @@ def evaluate(
             json.dump(lm_eval_results, f)
         
         cleaned_lm_eval_results = clean_lm_eval_results(lm_eval_results, tasks=lm_eval_evaluate_tasks)
-        results.update(cleaned_lm_eval_results)
-        print(cleaned_lm_eval_results)
-        
+        results.update(cleaned_lm_eval_results)        
         
     if len(gptq_evaluate_tasks) > 0:
         gptq_results = gptq_evaluate(
@@ -103,10 +101,8 @@ def evaluate(
             json.dump(gptq_results, f)
         
         results.update(gptq_results)
-        print(gptq_results)
     
     results_df = pd.DataFrame([results])
-    print(results_df)
     results_df.to_csv(os.path.join(output_dir, "results.csv"), index=False)
     return results_df
         
@@ -127,10 +123,11 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
     
-    evaluate(
+    results_df = evaluate(
         model_path=args.model_path,
         batch_size=args.batch_size,
         tasks=args.tasks,
         seed=args.seed,
     )
+    print(results_df)
     
