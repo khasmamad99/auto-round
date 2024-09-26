@@ -1,4 +1,6 @@
 import argparse
+import json
+import os
 
 import pandas as pd
 
@@ -6,54 +8,30 @@ from eval_042.evaluation import simple_evaluate as lm_eval_evaluate
 from eval.evaluation import EXT_TASKS, eval_model as gptq_evaluate
 
 
-def make_pandas_dataframe_from_lm_eval_results(
-    result_dict, 
-    column: str = "results"
-) -> pd.DataFrame:
-    """Generate dataframe of results."""
-
-    if column == "results":
-        column_name = "Tasks"
-    elif column == "groups":
-        column_name = "Groups"
-
-    all_headers = [
-        column_name,
-        "Version",
-        "Filter",
-        "n-shot",
-        "Metric",
-        "Value",
-        "Stderr",
-    ]
+def clean_lm_eval_results(lm_eval_results):
+    """Clean up the results from lm-eval."""
+    cleaned_results = {}
     
-    values = []
-
-    for k, dic in result_dict["results"].items():
-        version = result_dict["versions"].get(k, None)
-        n = int(result_dict["n-shot"][k])
-
+    accuracies = []
+    for k, dic in lm_eval_results["results"].items():
         if "alias" in dic:
             k = dic.pop("alias")
-
+            
         for (mf), v in dic.items():
             m, _, f = mf.partition(",")
             if m.endswith("_stderr"):
                 continue
             
             v = float(v)
-            if m + "_stderr" + "," + f in dic:
-                se = dic[m + "_stderr" + "," + f]
-                if se == "N/A":
-                    se = None
-                else:
-                    se = float(se)
-                values.append([k, version, f, n, m, v, se])
-            else:
-                values.append([k, version, f, n, m, v, None])
+            if m == "acc" or m == "word_perplexity":
+                cleaned_results[k] = v
+                
+            if m == "acc":
+                accuracies.append(v)
     
-    df = pd.DataFrame(values, columns=all_headers)
-    return df
+    avg_accuracy = sum(accuracies) / len(accuracies)
+    cleaned_results["avg_accuracy"] = avg_accuracy
+    return cleaned_results
 
 
 def evaluate(
@@ -87,9 +65,13 @@ def evaluate(
             batch_size=batch_size,
             random_seed=seed,
         )
-        results.update(lm_eval_results)
-        lm_eval_results_df = make_pandas_dataframe_from_lm_eval_results(lm_eval_results)
-        print(lm_eval_results_df)
+        lm_eval_results_write_path = os.path.join(model_path, "lm_eval_raw_results.json")
+        with open(lm_eval_results_write_path, "w") as f:
+            json.dump(lm_eval_results, f)
+        
+        cleaned_lm_eval_results = clean_lm_eval_results(lm_eval_results)
+        results.update(cleaned_lm_eval_results)
+        print(cleaned_lm_eval_results)
         
         
     if len(gptq_evaluate_tasks) > 0:
@@ -99,7 +81,17 @@ def evaluate(
             eval_bs=batch_size,
             seed=seed,
         )
+        
+        gptq_results_write_path = os.path.join(model_path, "gptq_raw_results.json")
+        with open(gptq_results_write_path, "w") as f:
+            json.dump(gptq_results, f)
+        
         results.update(gptq_results)
+        print(gptq_results)
+    
+    results_df = pd.DataFrame([results])
+    print(results_df)
+    results_df.to_csv(os.path.join(model_path, "results.csv"), index=False)
         
         
 if __name__ == "__main__":
