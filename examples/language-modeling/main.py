@@ -84,6 +84,7 @@ if __name__ == '__main__':
     parser.add_argument("--gradient_accumulate_steps", default=1, type=int, help="gradient accumulate steps")
 
     parser.add_argument("--nblocks", default=1, type=int, help="num of blocks to tune together")
+    parser.add_argument("--block_step_size", default=1, type=int, help="block size")
     parser.add_argument("--num_lookahead_blocks", default=0, type=int, help="num of blocks to look ahead")
     parser.add_argument("--num_observe_blocks", default=0, type=int, help="num of blocks to observe")
     
@@ -332,6 +333,7 @@ if __name__ == '__main__':
             f"-w{args.bits}g{args.group_size}"
             f"-clean_lkhd={args.cleanly_separated_lookahead}"
             f"-blcks={args.nblocks}"
+            f"-blck_step_size={args.block_step_size}"
             f"-lkhd_blcks={args.num_lookahead_blocks}"
             f"-lr={args.lr if args.lr is not None else 1.0/args.iters}"
             f"-lr_scheduler={'none' if not args.enable_lr_scheduler else 'linear_decay'}"
@@ -367,7 +369,8 @@ if __name__ == '__main__':
     model_name = args.model_name.rstrip("/")
     autoround = round(model, tokenizer, model_name, args.bits, args.group_size, sym=args.sym, batch_size=args.train_bs,
                       dataset=args.dataset, seqlen=seqlen, 
-                      nblocks=args.nblocks, num_lookahead_blocks=args.num_lookahead_blocks, num_observe_blocks=args.num_observe_blocks,
+                      nblocks=args.nblocks, block_step_size=args.block_step_size,
+                      num_lookahead_blocks=args.num_lookahead_blocks, num_observe_blocks=args.num_observe_blocks,
                       cleanly_separated_lookahead=args.cleanly_separated_lookahead,
                       isolation_experiment_v2=args.isolation_experiment_v2, fine_tune_block_idx=args.fine_tune_block_idx, observe_block_idx=args.observe_block_idx,
                       attach_loss_block_indices=args.attach_loss_block_indices,
@@ -381,7 +384,7 @@ if __name__ == '__main__':
                       low_cpu_mem_usage=low_cpu_mem_usage, data_type=args.data_type,
                       not_use_best_mse=not args.use_best_mse,
                       disable_wandb=args.disable_wandb,
-                      )
+                    )
     model, _ = autoround.quantize()
     if args.low_cpu_mem_mode == 1 or args.low_cpu_mem_mode == 2:
         import shutil

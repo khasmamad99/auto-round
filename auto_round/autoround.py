@@ -158,6 +158,7 @@ class AutoRound(object):
             lm_eval_numpy_random_seed: int = 1234,
             lm_eval_torch_random_seed: int = 1234,
             nblocks: int = 1,
+            block_step_size: int = 1,
             num_lookahead_blocks: int = 0,
             num_observe_blocks: int = 0,
             isolation_experiment_v2: bool = False,
@@ -189,6 +190,7 @@ class AutoRound(object):
         self.enable_minmax_tuning = enable_minmax_tuning
         self.nsamples = nsamples
         self.nblocks = nblocks
+        self.block_step_size = block_step_size
         self.num_lookahead_blocks = num_lookahead_blocks
         self.num_observe_blocks = num_observe_blocks
         self.cleanly_separated_lookahead = cleanly_separated_lookahead
@@ -333,6 +335,7 @@ class AutoRound(object):
                 inputs,
                 block_names,
                 nblocks=self.nblocks,
+                block_step_size=self.block_step_size,
                 num_lookahead_blocks=self.num_lookahead_blocks,
                 num_observe_blocks=self.num_observe_blocks,
                 device=self.device,
@@ -1333,6 +1336,7 @@ class AutoRound(object):
             inputs,
             block_names,
             nblocks=1,
+            block_step_size: int = 1,
             num_lookahead_blocks: int = 0,
             num_observe_blocks: int = 0,
             device=torch.device("cpu"),
@@ -1417,7 +1421,7 @@ class AutoRound(object):
                     self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
                     torch.cuda.empty_cache()
         else:
-            for i in range(0, len(block_names), nblocks):
+            for i in range(0, len(block_names), block_step_size):
                 fine_tune_block_names = block_names[i: i + nblocks]
                 logger.info(f"fine tune block {fine_tune_block_names}")
                 fine_tune_block = WrapperMultiblock(
