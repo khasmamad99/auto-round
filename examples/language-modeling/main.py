@@ -497,58 +497,19 @@ if __name__ == '__main__':
         if args.act_bits <= 8:
             user_model = model.to(device_str)
 
-        model_args += f",trust_remote_code=True"
-        if len(lm_eval_harness_tasks) > 0:
-            lm_eval_harness_results = simple_evaluate(model="hf", model_args=model_args,
-                                tasks=lm_eval_harness_tasks,
-                                batch_size=args.eval_bs, user_model=user_model,
-                                random_seed=args.lm_eval_random_seed,
-                                numpy_random_seed=args.lm_eval_numpy_random_seed,
-                                torch_random_seed=args.lm_eval_torch_random_seed,
-                                )
-        else:
-            lm_eval_harness_results = {}
-        
-        if len(external_tasks) > 0:
-            excel_name = os.path.join(output_dir, "external_results.xlsx")
-            external_results = eval_model(model_path=output_dir, tasks=external_tasks, dtype=dtype, limit=None,
-                   eval_bs=args.eval_bs, use_accelerate=args.low_gpu_mem_usage,
-                   device=torch_device, excel_file=excel_name)
-        else:
-            external_results = {}
+        import evaluate_all
+        eval_results = evaluate_all.evaluate(
+            model_path=eval_folder,
+            batch_size=args.eval_bs,
+            tasks=args.tasks,
+            seed=args.seed,
+        )
         
         if not args.disable_wandb:
             from auto_round.learning_curve_stats_utils import make_pandas_dataframe_from_lm_eval_results
             
-            results_df = make_pandas_dataframe_from_lm_eval_results(lm_eval_harness_results)    
-            results_df.insert(0, "run_name", run_name)
-            results_df.insert(1, "model_name", model_name)
-            results_df.insert(5, "num_blocks", args.nblocks)
-            results_df.insert(6, "num_lookahead_blocks", args.num_lookahead_blocks)
-            results_df.insert(7, "learning_rate", args.lr)
-            results_df.insert(8, "lr_scheduler", "none" if not args.enable_lr_scheduler else "linear_decay")
-            results_df.insert(9, "num_iters", args.iters)
-            results_df.insert(10, "num_fine_tuning_samples", args.nsamples)
-            results_df.insert(11, "optimizer", "adam" if args.adam else "signed_sgd")
+            wandb_table = wandb.Table(dataframe=eval_results)
+            wandb.log({f"eval_results": wandb_table})
             
-            for task, result in external_results.items():
-                if task == "wikitext2":
-                    task = "gptq_wikitext2"
-                results_df.insert(12, f"{task}_ppl", result)
-            
-            wandb_table = wandb.Table(dataframe=results_df)
-            wandb.log({f"lm_eval_{lm_eval_version.replace('.','')}_results": wandb_table})
-            
-            lm_eval_harness_results["configs"]["random_seed"] = args.lm_eval_random_seed
-            lm_eval_harness_results["configs"]["numpy_random_seed"] = args.lm_eval_numpy_random_seed
-            lm_eval_harness_results["configs"]["torch_random_seed"] = args.lm_eval_torch_random_seed
-            
-            run.config.update({
-                "lm_eval_version": lm_eval_version,
-                f"lm_eval_configs": lm_eval_harness_results["configs"],
-            })
-            
-        from lm_eval.utils import make_table
-        print(make_table(lm_eval_harness_results))
-        print(external_results)
+        print(eval_results)
         
