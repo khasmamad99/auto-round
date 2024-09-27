@@ -95,7 +95,7 @@ def evaluate(
     if len(gptq_evaluate_tasks) > 0:
         gptq_results = gptq_evaluate(
             model_path=model_path,
-            tasks=gptq_evaluate_tasks,
+            tasks=copy.deepcopy(gptq_evaluate_tasks),  # the function inplace modifies the tasks
             eval_bs=batch_size,
             seed=seed,
         )
