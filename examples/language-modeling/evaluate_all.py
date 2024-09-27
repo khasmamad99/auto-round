@@ -16,10 +16,7 @@ def clean_lm_eval_results(lm_eval_results, tasks: list[str]) -> OrderedDict[str,
     accuracies = []
     for k, dic in lm_eval_results["results"].items():
         if "alias" in dic:
-            k_idx = tasks.index(k)
-            tasks.remove(k)
             k = dic.pop("alias")
-            tasks.insert(k_idx, k)
             
         if k not in tasks:
             continue
