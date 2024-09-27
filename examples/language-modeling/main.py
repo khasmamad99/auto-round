@@ -505,7 +505,7 @@ if __name__ == '__main__':
             model_path=eval_folder,
             batch_size=args.eval_bs,
             tasks=args.tasks,
-            seed=args.seed,
+            seed=args.lm_eval_random_seed,
         )
         eval_results.insert(0, "model_name", model_name)
         eval_results.insert(1, "num_blocks", args.nblocks)
