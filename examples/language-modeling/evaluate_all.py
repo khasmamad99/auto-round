@@ -98,6 +98,9 @@ def evaluate(
         with open(gptq_results_write_path, "w") as f:
             json.dump(gptq_results, f)
         
+        for key, val in gptq_results.items():
+            gptq_results[key] = round(val, 2)
+            
         results.update(gptq_results)
     
     results_df = pd.DataFrame([results])
