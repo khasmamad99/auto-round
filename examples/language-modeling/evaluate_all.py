@@ -8,9 +8,6 @@ from eval_042.evaluation import simple_evaluate as lm_eval_evaluate
 from eval.evaluation import EXT_TASKS, eval_model as gptq_evaluate
 
 
-
-
-
 def clean_lm_eval_results(lm_eval_results, tasks: list[str]):
     """Clean up the results from lm-eval."""
     cleaned_results = {}
@@ -45,7 +42,7 @@ def clean_lm_eval_results(lm_eval_results, tasks: list[str]):
 
 def evaluate(
     model_path: str,
-    batch_size: int = 4,
+    batch_size: int = 32,
     tasks: str = (
         "lambada_openai,hellaswag,winogrande,piqa,mmlu,wikitext,truthfulqa_mc1"
         ",truthfulqa_mc2,openbookqa,boolq,rte,arc_easy,arc_challenge,wikitext2"
