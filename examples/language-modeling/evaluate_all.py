@@ -135,7 +135,7 @@ if __name__ == "__main__":
     
     for model_path in model_paths:
         results_df = evaluate(
-            model_path=args.model_path,
+            model_path=model_path,
             batch_size=args.batch_size,
             tasks=args.tasks,
             seed=args.seed,
