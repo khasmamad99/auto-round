@@ -42,7 +42,7 @@ if __name__ == '__main__':
     parser.add_argument("--train_bs", default=8, type=int,
                         help="train batch size")
 
-    parser.add_argument("--eval_bs", default=4, type=int,
+    parser.add_argument("--eval_bs", default=32, type=int,
                         help="eval batch size")
 
     parser.add_argument("--device", default="auto", type=str,
