@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+from collections import OrderedDict
 
 import pandas as pd
 
@@ -8,14 +9,17 @@ from eval_042.evaluation import simple_evaluate as lm_eval_evaluate
 from eval.evaluation import EXT_TASKS, eval_model as gptq_evaluate
 
 
-def clean_lm_eval_results(lm_eval_results, tasks: list[str]):
+def clean_lm_eval_results(lm_eval_results, tasks: list[str]) -> OrderedDict[str, float]:
     """Clean up the results from lm-eval."""
     cleaned_results = {}
     
     accuracies = []
     for k, dic in lm_eval_results["results"].items():
         if "alias" in dic:
+            k_idx = tasks.index(k)
+            tasks.remove(k)
             k = dic.pop("alias")
+            tasks.insert(k_idx, k)
             
         if k not in tasks:
             continue
@@ -37,7 +41,15 @@ def clean_lm_eval_results(lm_eval_results, tasks: list[str]):
     
     avg_accuracy = round(sum(accuracies) / len(accuracies), 2)
     cleaned_results["avg_accuracy"] = avg_accuracy
-    return cleaned_results
+    
+    cleaned_oredered_results = OrderedDict()
+    for task in tasks:
+        if not task == "wikitext":  # append to the end
+            cleaned_oredered_results[task] = cleaned_results[task]
+    cleaned_oredered_results["avg_accuracy"] = avg_accuracy
+    cleaned_oredered_results["lm_eval_wikitext2_ppl"] = cleaned_results["wikitext"]
+    
+    return cleaned_oredered_results
 
 
 def evaluate(
@@ -66,7 +78,7 @@ def evaluate(
     else:
         output_dir = model_path
         
-    results = {}
+    results = OrderedDict()
     model_args = f"pretrained={model_path},trust_remote_code=True"
     if len(lm_eval_evaluate_tasks) > 0:
         lm_eval_results = lm_eval_evaluate(
@@ -91,14 +103,15 @@ def evaluate(
             seed=seed,
         )
         
+        ordered_cleaned_gptq_results = OrderedDict()
+        for task in gptq_evaluate_tasks:
+            ordered_cleaned_gptq_results[f"gptq_{task}_ppl"] = round(gptq_results[task], 2)
+        
         gptq_results_write_path = os.path.join(output_dir, "gptq_raw_results.json")
         with open(gptq_results_write_path, "w") as f:
             json.dump(gptq_results, f)
         
-        for key, val in gptq_results.items():
-            gptq_results[key] = round(val, 2)
-            
-        results.update(gptq_results)
+        results.update(ordered_cleaned_gptq_results)
     
     results_df = pd.DataFrame([results])
     results_df.to_csv(os.path.join(output_dir, "results.csv"), index=False)
@@ -113,9 +126,9 @@ if __name__ == "__main__":
         "--tasks", 
         type=str, 
         default=(
-            "wikitext2,ptb,c4,wikitext"
+            "wikitext2,ptb,c4,"
             ",mmlu,lambada_openai,hellaswag,winogrande,piqa,truthfulqa_mc1"
-            ",openbookqa,boolq,rte,arc_easy,arc_challenge"
+            ",openbookqa,boolq,rte,arc_easy,arc_challenge,wikitext"
         )
     )
     parser.add_argument("--seed", type=int, default=0)
