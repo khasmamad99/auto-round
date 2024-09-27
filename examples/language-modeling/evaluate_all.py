@@ -124,7 +124,7 @@ if __name__ == "__main__":
         "--tasks", 
         type=str, 
         default=(
-            "wikitext2,ptb,c4,"
+            "wikitext2,ptb,c4"
             ",mmlu,lambada_openai,hellaswag,winogrande,piqa,truthfulqa_mc1"
             ",openbookqa,boolq,rte,arc_easy,arc_challenge,wikitext"
         )
