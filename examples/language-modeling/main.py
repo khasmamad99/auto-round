@@ -120,7 +120,7 @@ if __name__ == '__main__':
                             "wikitext2,ptb,c4"
                             ",mmlu,lambada_openai,hellaswag,winogrande,piqa,truthfulqa_mc1"
                             ",openbookqa,boolq,rte,arc_easy,arc_challenge,wikitext"
-                        )
+                        ),
                         help="lm-eval tasks for lm_eval version 0.4")
 
     parser.add_argument("--output_dir", default=None, type=str,
