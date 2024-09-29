@@ -37,8 +37,9 @@ def clean_lm_eval_results(lm_eval_results, tasks: list[str]) -> OrderedDict[str,
             elif m == "word_perplexity":
                 cleaned_results[k] = round(v, 2)
     
-    avg_accuracy = round(sum(accuracies) / len(accuracies), 2)
-    cleaned_results["avg_accuracy"] = avg_accuracy
+    if len(accuracies) > 0:
+        avg_accuracy = round(sum(accuracies) / len(accuracies), 2)
+        cleaned_results["avg_accuracy"] = avg_accuracy
     
     cleaned_oredered_results = OrderedDict()
     for task in tasks:
