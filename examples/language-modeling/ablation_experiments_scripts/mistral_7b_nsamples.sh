@@ -25,6 +25,7 @@ python3 main.py \
     --nblocks 1 \
     --block_step_size 1 \
     --num_lookahead_blocks 3 \
+    --low_gpu_mem_usage \
     --wandb_project_name khas-thesis-ablations
 
 
@@ -55,6 +56,7 @@ python3 main.py \
     --nblocks 3 \
     --block_step_size 3 \
     --num_lookahead_blocks 0 \
+    --low_gpu_mem_usage \
     --wandb_project_name khas-thesis-ablations
 
 
@@ -85,4 +87,5 @@ python3 main.py \
     --nblocks 3 \
     --block_step_size 1 \
     --num_lookahead_blocks 0 \
+    --low_gpu_mem_usage \
     --wandb_project_name khas-thesis-ablations
