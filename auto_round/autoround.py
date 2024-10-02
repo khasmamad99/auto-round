@@ -62,6 +62,39 @@ from .learning_curve_stats_utils import (
 )
 
 
+def get_block_indices(
+    nblocks: int, 
+    num_lookahead_blocks: int,
+    num_observe_blocks: int, 
+    block_step_size: int, 
+    total_num_blocks: int
+):
+    # Input validation
+    assert 1 <= nblocks <= total_num_blocks, "nblocks must be between 1 and total_num_blocks."
+    assert 1 <= block_step_size <= nblocks, "block_step_size must be between 1 and nblocks."
+    assert 0 <= num_lookahead_blocks <= total_num_blocks - 1, "num_lookahead_blocks must be between 0 and total_num_blocks - 1."
+    
+    def _get_block_indices(start_block_idx, num_fine_tune_blocks, num_lookahead_blocks, num_observe_blocks, total_num_blocks):
+        fine_tune_block_start_idx = start_block_idx
+        fine_tune_block_end_idx = min(start_block_idx + num_fine_tune_blocks, total_num_blocks)
+        fine_tune_block_indices = slice(fine_tune_block_start_idx, fine_tune_block_end_idx)
+        attach_loss_block_start_idx = fine_tune_block_end_idx
+        attach_loss_block_end_idx = min(fine_tune_block_end_idx + num_lookahead_blocks, total_num_blocks)
+        attach_loss_block_indices = slice(attach_loss_block_start_idx, attach_loss_block_end_idx)
+        observe_block_start_idx = attach_loss_block_end_idx
+        observe_block_end_idx = min(attach_loss_block_end_idx + num_observe_blocks, total_num_blocks)
+        observe_block_indices = slice(observe_block_start_idx, observe_block_end_idx)
+        return fine_tune_block_indices, attach_loss_block_indices, observe_block_indices
+    
+    for start_block_idx in range(0, total_num_blocks, block_step_size):
+        if start_block_idx == 0:
+            for num_fine_tune_blocks in range(block_step_size, nblocks + 1, block_step_size):
+                yield _get_block_indices(start_block_idx, num_fine_tune_blocks, num_lookahead_blocks, num_observe_blocks, total_num_blocks)
+        else:
+            num_fine_tune_blocks = nblocks
+            yield _get_block_indices(start_block_idx, num_fine_tune_blocks, num_lookahead_blocks, num_observe_blocks, total_num_blocks)
+
+
 
 class AutoRound(object):
     """This is Signround+ which is an advanced version of Signround. For more information,
@@ -1451,49 +1484,51 @@ class AutoRound(object):
                     self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
                     torch.cuda.empty_cache()
         else:
-            for i in range(0, len(block_names), block_step_size):
-                fine_tune_block_names = block_names[i: i + nblocks]
-                logger.info(f"fine tune block {fine_tune_block_names}")
-                fine_tune_block = WrapperMultiblock(
-                    [get_module(model, fine_tune_block_name) for fine_tune_block_name in fine_tune_block_names]
-                )
+            for fine_tune_block_indices, attach_loss_block_indices, observe_block_indices in get_block_indices(
+                nblocks=nblocks, 
+                block_step_size=block_step_size, 
+                num_lookahead_blocks=num_lookahead_blocks, 
+                num_observe_blocks=num_observe_blocks,
+                total_num_blocks=len(block_names),
+            ):
+                    fine_tune_block_names = block_names[fine_tune_block_indices]
+                    logger.info(f"fine tune block {fine_tune_block_names}")
+                    fine_tune_block = WrapperMultiblock(
+                        [get_module(model, fine_tune_block_name) for fine_tune_block_name in fine_tune_block_names]
+                    )
                 
-                attach_loss_block_start_idx = i + nblocks
-                attach_loss_block_end_idx = attach_loss_block_start_idx + num_lookahead_blocks
-                attach_loss_block_names = block_names[attach_loss_block_start_idx: attach_loss_block_end_idx]
-                attach_loss_block = WrapperMultiblock(
-                    [get_module(model, attach_loss_block_name) for attach_loss_block_name in attach_loss_block_names]
-                )
-                if len(attach_loss_block_names) == 0:
-                    attach_loss_block_names = fine_tune_block_names
-                logger.info(f"attach loss block {attach_loss_block_names}") 
-                            
-                observe_block_start_idx = attach_loss_block_end_idx
-                observe_block_end_idx = observe_block_start_idx + num_observe_blocks
-                observe_block_names = block_names[observe_block_start_idx: observe_block_end_idx]
-                observe_block = WrapperMultiblock(
-                    [get_module(model, observe_block_name) for observe_block_name in observe_block_names]
-                )
-                if len(observe_block_names) == 0:
-                    observe_block_names = attach_loss_block_names
-                logger.info(f"observe block {observe_block_names}") 
-                
-                combined_block = WrapperMultiblock([fine_tune_block, attach_loss_block, observe_block])
-                combined_block = combined_block.to(device)
+                    attach_loss_block_names = block_names[attach_loss_block_indices]
+                    attach_loss_block = WrapperMultiblock(
+                        [get_module(model, attach_loss_block_name) for attach_loss_block_name in attach_loss_block_names]
+                    )
+                    if len(attach_loss_block_names) == 0:
+                        attach_loss_block_names = fine_tune_block_names
+                    logger.info(f"attach loss block {attach_loss_block_names}") 
+                                
+                    observe_block_names = block_names[observe_block_indices]
+                    observe_block = WrapperMultiblock(
+                        [get_module(model, observe_block_name) for observe_block_name in observe_block_names]
+                    )
+                    if len(observe_block_names) == 0:
+                        observe_block_names = attach_loss_block_names
+                    logger.info(f"observe block {observe_block_names}") 
+                    
+                    combined_block = WrapperMultiblock([fine_tune_block, attach_loss_block, observe_block])
+                    combined_block = combined_block.to(device)
 
-                q_input, input_ids, _ = self.quant_block_with_lookahead(
-                    combined_block,
-                    input_ids,
-                    input_others,
-                    q_input=q_input,
-                    device=device,
-                    fine_tune_block_name=format_layer_name(fine_tune_block_names if isinstance(fine_tune_block_names, str) else fine_tune_block_names[-1]),
-                    attach_loss_block_name=format_layer_name(attach_loss_block_names if isinstance(attach_loss_block_names, str) else attach_loss_block_names[-1]),
-                    observe_block_name=format_layer_name(observe_block_names if isinstance(observe_block_names, str) else observe_block_names[-1]),
-                )
+                    q_input, input_ids, _ = self.quant_block_with_lookahead(
+                        combined_block,
+                        input_ids,
+                        input_others,
+                        q_input=q_input,
+                        device=device,
+                        fine_tune_block_name=format_layer_name(fine_tune_block_names if isinstance(fine_tune_block_names, str) else fine_tune_block_names[-1]),
+                        attach_loss_block_name=format_layer_name(attach_loss_block_names if isinstance(attach_loss_block_names, str) else attach_loss_block_names[-1]),
+                        observe_block_name=format_layer_name(observe_block_names if isinstance(observe_block_names, str) else observe_block_names[-1]),
+                    )
 
-                self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
-                torch.cuda.empty_cache()
+                    self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
+                    torch.cuda.empty_cache()
 
         del q_input
         del input_ids
