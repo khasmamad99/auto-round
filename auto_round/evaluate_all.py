@@ -82,8 +82,6 @@ def evaluate(
         
     results = OrderedDict()
     model_args = f"pretrained={model_path},trust_remote_code=True"
-    if results_file_name_suffix != "":
-        results_file_name_suffix = f"_{results_file_name_suffix}"
     if len(lm_eval_evaluate_tasks) > 0:
         lm_eval_results = lm_eval_evaluate(
             model="hf",
