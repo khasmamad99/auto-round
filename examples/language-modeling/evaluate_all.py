@@ -37,15 +37,18 @@ def clean_lm_eval_results(lm_eval_results, tasks: list[str]) -> OrderedDict[str,
             elif m == "word_perplexity":
                 cleaned_results[k] = round(v, 2)
     
-    avg_accuracy = round(sum(accuracies) / len(accuracies), 2)
-    cleaned_results["avg_accuracy"] = avg_accuracy
+    if len(accuracies) > 0:
+        avg_accuracy = round(sum(accuracies) / len(accuracies), 2)
+        cleaned_results["avg_accuracy"] = avg_accuracy
     
     cleaned_oredered_results = OrderedDict()
     for task in tasks:
         if not task == "wikitext":  # append to the end
             cleaned_oredered_results[task] = cleaned_results[task]
-    cleaned_oredered_results["avg_accuracy"] = avg_accuracy
-    cleaned_oredered_results["lm_eval_wikitext2_ppl"] = cleaned_results["wikitext"]
+    if "avg_accuracy" in cleaned_results:
+        cleaned_oredered_results["avg_accuracy"] = avg_accuracy
+    if "wikitext" in cleaned_results:
+        cleaned_oredered_results["lm_eval_wikitext2_ppl"] = cleaned_results["wikitext"]
     
     return cleaned_oredered_results
 
