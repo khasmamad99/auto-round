@@ -89,6 +89,7 @@ if __name__ == '__main__':
     parser.add_argument("--block_step_size", default=1, type=int, help="block size")
     parser.add_argument("--num_lookahead_blocks", default=0, type=int, help="num of blocks to look ahead")
     parser.add_argument("--num_observe_blocks", default=0, type=int, help="num of blocks to observe")
+    parser.add_argument("--eval_after_each_optimization", action='store_true', help="eval after each optimization")
     
     parser.add_argument("--cleanly_separated_lookahead", action='store_true', help="cleanly separated lookahead")
     
