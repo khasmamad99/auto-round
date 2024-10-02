@@ -61,6 +61,7 @@ def evaluate(
         ",truthfulqa_mc2,openbookqa,boolq,rte,arc_easy,arc_challenge,wikitext2"
     ),
     seed: int = 0,
+    results_file_name_suffix: str = "",
 ):
     """
     Evaluate a model on a set of tasks.
@@ -81,6 +82,8 @@ def evaluate(
         
     results = OrderedDict()
     model_args = f"pretrained={model_path},trust_remote_code=True"
+    if results_file_name_suffix != "":
+        results_file_name_suffix = f"_{results_file_name_suffix}"
     if len(lm_eval_evaluate_tasks) > 0:
         lm_eval_results = lm_eval_evaluate(
             model="hf",
@@ -89,7 +92,7 @@ def evaluate(
             batch_size=batch_size,
             random_seed=seed,
         )
-        lm_eval_results_write_path = os.path.join(output_dir, "lm_eval_raw_results.json")
+        lm_eval_results_write_path = os.path.join(output_dir, f"lm_eval_raw_results{results_file_name_suffix}.json")
         with open(lm_eval_results_write_path, "w") as f:
             json.dump(lm_eval_results, f)
         
@@ -108,14 +111,14 @@ def evaluate(
         for task in gptq_evaluate_tasks:
             ordered_cleaned_gptq_results[f"gptq_{task}_ppl"] = round(gptq_results[task], 2)
         
-        gptq_results_write_path = os.path.join(output_dir, "gptq_raw_results.json")
+        gptq_results_write_path = os.path.join(output_dir, f"gptq_raw_results{results_file_name_suffix}.json")
         with open(gptq_results_write_path, "w") as f:
             json.dump(gptq_results, f)
         
         results.update(ordered_cleaned_gptq_results)
     
     results_df = pd.DataFrame([results])
-    results_df.to_csv(os.path.join(output_dir, "results.csv"), index=False)
+    results_df.to_csv(os.path.join(output_dir, f"results{results_file_name_suffix}.csv"), index=False)
     return results_df
         
         
