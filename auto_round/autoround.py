@@ -1496,24 +1496,6 @@ class AutoRound(object):
 
                     self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
                     torch.cuda.empty_cache()
-                    if self.eval_after_each_optimization:
-                        
-                        results_file_suffix = (
-                            f"_num-quantized-blocks::{fine_tune_block_indices.stop}"
-                            f"_fine-tune-block-indices::{fine_tune_block_indices.start}:{fine_tune_block_indices.stop}"
-                        )
-                        model = model.to("cpu")
-                        model.save_pretrained(self.model_save_dir)
-                        self.tokenizer.save_pretrained(self.model_save_dir)
-                        
-                        eval_results = evaluate_all.evaluate(
-                            model_path=self.model_save_dir,
-                            batch_size=self.eval_batch_size,
-                            results_file_name_suffix=results_file_suffix,
-                            tasks=self.eval_tasks,
-                            seed=self.eval_seed,
-                        )    
-                        print(eval_results)
         else:
             for fine_tune_block_indices, attach_loss_block_indices, observe_block_indices in get_block_indices(
                 nblocks=nblocks, 
@@ -1560,6 +1542,25 @@ class AutoRound(object):
 
                     self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
                     torch.cuda.empty_cache()
+                    
+                    if self.eval_after_each_optimization:
+                        
+                        results_file_suffix = (
+                            f"_num-quantized-blocks::{fine_tune_block_indices.stop}"
+                            f"_fine-tune-block-indices::{fine_tune_block_indices.start}:{fine_tune_block_indices.stop}"
+                        )
+                        model = model.to("cpu")
+                        model.save_pretrained(self.model_save_dir)
+                        self.tokenizer.save_pretrained(self.model_save_dir)
+                        
+                        eval_results = evaluate_all.evaluate(
+                            model_path=self.model_save_dir,
+                            batch_size=self.eval_batch_size,
+                            results_file_name_suffix=results_file_suffix,
+                            tasks=self.eval_tasks,
+                            seed=self.eval_seed,
+                        )    
+                        print(eval_results)
 
         del q_input
         del input_ids
