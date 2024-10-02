@@ -24,6 +24,7 @@ import shutil
 import torch
 import transformers
 from torch import autocast
+import pandas as pd
 
 import wandb
 import lm_eval
@@ -1454,6 +1455,9 @@ class AutoRound(object):
                 for i in range(len(input_others[key])):
                     input_others[key][i].to(tmp_dtype)
                     
+        if self.eval_after_each_optimization and not self.disable_wandb:
+            local_evals_df = None
+                    
         if self.cleanly_separated_lookahead: 
             for substructure_first_block_idx in range(0, len(block_names), self.num_lookahead_blocks + 1):
                 attach_loss_block_idx = min(substructure_first_block_idx + self.num_lookahead_blocks, len(block_names) - 1)
@@ -1545,7 +1549,6 @@ class AutoRound(object):
                     torch.cuda.empty_cache()
                     
                     if self.eval_after_each_optimization:
-                        
                         results_file_suffix = (
                             f"_num-quantized-blocks::{fine_tune_block_indices.stop}"
                             f"_fine-tune-block-indices::{fine_tune_block_indices.start}:{fine_tune_block_indices.stop}"
@@ -1563,9 +1566,22 @@ class AutoRound(object):
                         )    
                         print(eval_results)
                         
+                        if not self.disable_wandb:
+                            if local_evals_df is None:
+                                local_evals_df = pd.DataFrame(eval_results)
+                                local_evals_df.insert(0, "num_quantized_blocks", fine_tune_block_indices.stop)
+                                local_evals_df.insert(1, "fine_tune_block_indices", f"{fine_tune_block_indices.start}:{fine_tune_block_indices.stop}")
+                            else:
+                                eval_results["num_quantized_blocks"] = fine_tune_block_indices.stop
+                                eval_results["fine_tune_block_indices"] = f"{fine_tune_block_indices.start}:{fine_tune_block_indices.stop}"
+                                local_evals_df = pd.concat([local_evals_df, pd.DataFrame(eval_results)], ignore_index=True)
+                            wandb.log({"local_eval_results": wandb.Table(dataframe=local_evals_df)})
+                        
                         # delete model weights
                         for file_path in glob.glob(os.path.join(self.model_save_dir, "*.safetensors")):
                             os.remove(file_path)
+                            
+                        self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
                         
                         
 
