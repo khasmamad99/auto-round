@@ -378,12 +378,15 @@ if __name__ == '__main__':
             mode="offline" if args.wandb_offline else "online",
             dir=WANDB_LOG_DIR,
         )
-        
+    output_dir = os.path.join(args.output_dir, run_name.replace("=", "::"))
+    export_dir = output_dir + "_export"
     model_name = args.model_name.rstrip("/")
     autoround = round(model, tokenizer, model_name, args.bits, args.group_size, sym=args.sym, round_to_nearest=args.round_to_nearest,
                       batch_size=args.train_bs, dataset=args.dataset, seqlen=seqlen, 
                       nblocks=args.nblocks, block_step_size=args.block_step_size,
                       num_lookahead_blocks=args.num_lookahead_blocks, num_observe_blocks=args.num_observe_blocks,
+                      eval_after_each_optimization=args.eval_after_each_optimization,
+                      model_save_dir=output_dir, eval_tasks=args.tasks, eval_seed=args.lm_eval_random_seed,
                       cleanly_separated_lookahead=args.cleanly_separated_lookahead,
                       isolation_experiment_v2=args.isolation_experiment_v2, fine_tune_block_idx=args.fine_tune_block_idx, observe_block_idx=args.observe_block_idx,
                       attach_loss_block_indices=args.attach_loss_block_indices,
@@ -406,9 +409,6 @@ if __name__ == '__main__':
     model.eval()
     if "cpu" not in device_str:
         torch.cuda.empty_cache()
-
-    output_dir = os.path.join(args.output_dir, run_name.replace("=", "::"))
-    export_dir = output_dir + "_export"
 
     deployment_device = args.deployment_device.split(',')
     gpu_formats = []
@@ -462,9 +462,9 @@ if __name__ == '__main__':
     if isinstance(tasks, str):
         tasks = tasks.split(',')
     if not use_eval_legacy:
-        from eval import eval_model
+        from auto_round.eval import eval_model
     else:
-        from eval_legacy import eval_model
+        from auto_round.eval_legacy import eval_model
 
         if isinstance(tasks, list):
             if "mmlu" in tasks:
@@ -492,8 +492,8 @@ if __name__ == '__main__':
                    device=torch_device, excel_file=excel_name)
 
     if not args.disable_eval and lm_eval_version == "0.4.2":
-        from eval_042.evaluation import simple_evaluate
-        from eval.evaluation import EXT_TASKS
+        from auto_round.eval_042.evaluation import simple_evaluate
+        from auto_round.eval.evaluation import EXT_TASKS
         
         external_tasks = []
         lm_eval_harness_tasks = []
@@ -513,7 +513,7 @@ if __name__ == '__main__':
         if args.act_bits <= 8:
             user_model = model.to(device_str)
 
-        import evaluate_all
+        from auto_round import evaluate_all
         eval_results = evaluate_all.evaluate(
             model_path=eval_folder,
             batch_size=args.eval_bs,

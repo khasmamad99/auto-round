@@ -61,6 +61,8 @@ from .learning_curve_stats_utils import (
     make_pandas_dataframe_from_lm_eval_results,
 )
 
+from auto_round import evaluate_all
+
 
 def get_block_indices(
     nblocks: int, 
@@ -195,6 +197,10 @@ class AutoRound(object):
             block_step_size: int = 1,
             num_lookahead_blocks: int = 0,
             num_observe_blocks: int = 0,
+            eval_after_each_optimization: bool = False,
+            eval_tasks: str = "",
+            eval_seed: int = 0,
+            model_save_dir: str = None,
             isolation_experiment_v2: bool = False,
             cleanly_separated_lookahead: bool = False,
             fine_tune_block_idx: int = 0,
@@ -228,6 +234,10 @@ class AutoRound(object):
         self.block_step_size = block_step_size
         self.num_lookahead_blocks = num_lookahead_blocks
         self.num_observe_blocks = num_observe_blocks
+        self.eval_after_each_optimization = eval_after_each_optimization
+        self.model_save_dir = model_save_dir
+        self.eval_tasks = eval_tasks
+        self.eval_seed = eval_seed
         self.cleanly_separated_lookahead = cleanly_separated_lookahead
         self.isolation_experiment_v2 = isolation_experiment_v2
         self.fine_tune_block_idx = fine_tune_block_idx
@@ -304,6 +314,9 @@ class AutoRound(object):
             assert self.num_lookahead_blocks > 0, "num_lookahead_blocks must be > 0 when cleanly_separated_lookahead is True"
         assert self.num_lookahead_blocks >= 0, "num_lookahead_blocks must be non-negative"
         assert self.num_observe_blocks >= 0, "num_observe_blocks must be non-negative"
+        if self.eval_after_each_optimization:
+            assert self.model_save_dir is not None, "model_save_dir must be provided when eval_after_each_optimization is True"
+            assert self.eval_tasks != "", "eval_tasks must be provided when eval_after_each_optimization is True"
         assert self.fine_tune_block_idx <= self.observe_block_idx, (
             f"fine_tune_block_idx {self.fine_tune_block_idx} should be less than observe_block_idx {self.observe_block_idx}"
         )
@@ -1483,6 +1496,24 @@ class AutoRound(object):
 
                     self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
                     torch.cuda.empty_cache()
+                    if self.eval_after_each_optimization:
+                        
+                        results_file_suffix = (
+                            f"_num-quantized-blocks::{fine_tune_block_indices.stop}"
+                            f"_fine-tune-block-indices::{fine_tune_block_indices.start}:{fine_tune_block_indices.stop}"
+                        )
+                        model = model.to("cpu")
+                        model.save_pretrained(self.model_save_dir)
+                        self.tokenizer.save_pretrained(self.model_save_dir)
+                        
+                        eval_results = evaluate_all.evaluate(
+                            model_path=self.model_save_dir,
+                            batch_size=self.eval_batch_size,
+                            results_file_name_suffix=results_file_suffix,
+                            tasks=self.eval_tasks,
+                            seed=self.eval_seed,
+                        )    
+                        print(eval_results)
         else:
             for fine_tune_block_indices, attach_loss_block_indices, observe_block_indices in get_block_indices(
                 nblocks=nblocks, 
