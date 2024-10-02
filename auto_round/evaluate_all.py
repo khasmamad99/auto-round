@@ -6,8 +6,8 @@ from collections import OrderedDict
 
 import pandas as pd
 
-from eval_042.evaluation import simple_evaluate as lm_eval_evaluate
-from eval.evaluation import EXT_TASKS, eval_model as gptq_evaluate
+from auto_round.eval_042.evaluation import simple_evaluate as lm_eval_evaluate
+from auto_round.eval.evaluation import EXT_TASKS, eval_model as gptq_evaluate
 
 
 def clean_lm_eval_results(lm_eval_results, tasks: list[str]) -> OrderedDict[str, float]:
@@ -91,6 +91,7 @@ def evaluate(
             tasks=lm_eval_evaluate_tasks,
             batch_size=batch_size,
             random_seed=seed,
+            limit=1,
         )
         lm_eval_results_write_path = os.path.join(output_dir, f"lm_eval_raw_results{results_file_name_suffix}.json")
         with open(lm_eval_results_write_path, "w") as f:
