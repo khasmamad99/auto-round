@@ -89,7 +89,6 @@ def evaluate(
             tasks=lm_eval_evaluate_tasks,
             batch_size=batch_size,
             random_seed=seed,
-            limit=1,
         )
         lm_eval_results_write_path = os.path.join(output_dir, f"lm_eval_raw_results{results_file_name_suffix}.json")
         with open(lm_eval_results_write_path, "w") as f:
