@@ -348,6 +348,7 @@ if __name__ == '__main__':
                 f"-blcks={args.nblocks}"
                 f"-blck_step_size={args.block_step_size}"
                 f"-lkhd_blcks={args.num_lookahead_blocks}"
+                f"-local_eval={args.eval_after_each_optimization}"
                 f"-lr={args.lr if args.lr is not None else 1.0/args.iters}"
                 f"-lr_scheduler={'none' if not args.enable_lr_scheduler else 'linear_decay'}"
                 f"-iters={args.iters}"
