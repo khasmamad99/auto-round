@@ -142,6 +142,7 @@ class AutoRound(object):
             device: str = None,
             lr_scheduler=None,
             dataset: Union[str, list, tuple, torch.utils.data.DataLoader] = "NeelNanda/pile-10k",
+            round_to_nearest: bool = False,
             enable_quanted_input: bool = True,
             enable_minmax_tuning: bool = True,
             lr: float = None,
@@ -186,6 +187,7 @@ class AutoRound(object):
         self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
         self.model_name = model_name
         self.amp = amp
+        self.round_to_nearest = round_to_nearest
         self.enable_quanted_input = enable_quanted_input
         self.enable_minmax_tuning = enable_minmax_tuning
         self.nsamples = nsamples
@@ -312,46 +314,74 @@ class AutoRound(object):
 
         layer_names = self.get_quantized_layer_names_outside_blocks()
         self.start_time = time.time()
-        all_first_block_names = [block[0] for block in all_blocks]
-        all_inputs = self.try_cache_inter_data_gpucpu(all_first_block_names, self.nsamples, layer_names=layer_names)
-        for block_names in all_blocks:
-            inputs = all_inputs[block_names[0]]
-            all_inputs.pop(block_names[0])
-            self.inputs = None
-            del self.inputs
-            if "input_ids" in inputs.keys():
-                total_samples = len(inputs["input_ids"])
-                self.n_samples = total_samples
-                if total_samples < self.train_bs:
-                    self.train_bs = total_samples
-                    logger.warning(f"force the train batch size to {total_samples} ")
-
-        self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
-        torch.cuda.empty_cache()
         
-        if not self.isolation_experiment_v2:
-            self.quant_blocks(
-                self.model,
-                inputs,
-                block_names,
-                nblocks=self.nblocks,
-                block_step_size=self.block_step_size,
-                num_lookahead_blocks=self.num_lookahead_blocks,
-                num_observe_blocks=self.num_observe_blocks,
-                device=self.device,
-            )
+        if self.round_to_nearest:
+            logger.info("Round To Nearest - Quantizing the model using Round To Nearest")
+            for block_name in all_blocks[0]:
+                block = get_module(self.model, block_name)
+                quantized_layer_names, unquantized_layer_names = wrapper_block(
+                    block=block, 
+                    enable_minmax_tuning=self.enable_minmax_tuning,
+                    device=self.device,
+                )
+                
+                dump_info = (
+                    f"{block_name}: quantized {len(quantized_layer_names)}/{(len(quantized_layer_names) + len(unquantized_layer_names))} "
+                    f"layers in the block with RTE."
+                )
+                logger.info(dump_info)
+                if len(unquantized_layer_names) != 0:
+                    logger.info(f"{unquantized_layer_names} have not been quantized")
+                
+                unwrapper_block(
+                    block=block,
+                    vs=0,
+                    min_scales=torch.tensor(1.0, device=self.device, dtype=torch.float32),
+                    max_scales=torch.tensor(1.0, device=self.device, dtype=torch.float32),
+                )
+                self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
+                torch.cuda.empty_cache()
         else:
-            self.quant_blocks_isolation_experiment_v2(
-                self.model,
-                inputs,
-                block_names,
-                fine_tune_block_idx=self.fine_tune_block_idx,
-                observe_block_idx=self.observe_block_idx,
-                attach_loss_block_indices=self.attach_loss_block_indices,
-                device=self.device,
+            all_first_block_names = [block[0] for block in all_blocks]
+            all_inputs = self.try_cache_inter_data_gpucpu(all_first_block_names, self.nsamples, layer_names=layer_names)
+            for block_names in all_blocks:
+                inputs = all_inputs[block_names[0]]
+                all_inputs.pop(block_names[0])
+                self.inputs = None
+                del self.inputs
+                if "input_ids" in inputs.keys():
+                    total_samples = len(inputs["input_ids"])
+                    self.n_samples = total_samples
+                    if total_samples < self.train_bs:
+                        self.train_bs = total_samples
+                        logger.warning(f"force the train batch size to {total_samples} ")
+
+            self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
+            torch.cuda.empty_cache()
+            
+            if not self.isolation_experiment_v2:
+                self.quant_blocks(
+                    self.model,
+                    inputs,
+                    block_names,
+                    nblocks=self.nblocks,
+                    block_step_size=self.block_step_size,
+                    num_lookahead_blocks=self.num_lookahead_blocks,
+                    num_observe_blocks=self.num_observe_blocks,
+                    device=self.device,
+                )
+            else:
+                self.quant_blocks_isolation_experiment_v2(
+                    self.model,
+                    inputs,
+                    block_names,
+                    fine_tune_block_idx=self.fine_tune_block_idx,
+                    observe_block_idx=self.observe_block_idx,
+                    attach_loss_block_indices=self.attach_loss_block_indices,
+                    device=self.device,
             )
 
-        self.quant_layers(layer_names, all_inputs)
+            self.quant_layers(layer_names, all_inputs)
 
         self.dump_qinfo_to_layer_config()
 

@@ -83,6 +83,8 @@ if __name__ == '__main__':
 
     parser.add_argument("--gradient_accumulate_steps", default=1, type=int, help="gradient accumulate steps")
 
+    parser.add_argument("--round_to_nearest", action='store_true', help="round to nearest")
+
     parser.add_argument("--nblocks", default=1, type=int, help="num of blocks to tune together")
     parser.add_argument("--block_step_size", default=1, type=int, help="block size")
     parser.add_argument("--num_lookahead_blocks", default=0, type=int, help="num of blocks to look ahead")
@@ -331,21 +333,29 @@ if __name__ == '__main__':
               f"gpu")
 
     if not args.isolation_experiment_v2:
-        run_name = (
-            f"{model_name.split('/')[-1]}"
-            f"-w{args.bits}g{args.group_size}"
-            f"-clean_lkhd={args.cleanly_separated_lookahead}"
-            f"-blcks={args.nblocks}"
-            f"-blck_step_size={args.block_step_size}"
-            f"-lkhd_blcks={args.num_lookahead_blocks}"
-            f"-lr={args.lr if args.lr is not None else 1.0/args.iters}"
-            f"-lr_scheduler={'none' if not args.enable_lr_scheduler else 'linear_decay'}"
-            f"-iters={args.iters}"
-            f"-nsamples={args.nsamples}"
-            f"-optimizer={'adam' if args.adam else 'signed_sgd'}"
-            f"-seed={args.seed}"
-        )
+        if args.round_to_nearest:
+            run_name = (
+                f"{model_name.split('/')[-1]}"
+                f"-w{args.bits}g{args.group_size}"
+                f"_round_to_nearest"
+            )
+        else:
+            run_name = (
+                f"{model_name.split('/')[-1]}"
+                f"-w{args.bits}g{args.group_size}"
+                f"-clean_lkhd={args.cleanly_separated_lookahead}"
+                f"-blcks={args.nblocks}"
+                f"-blck_step_size={args.block_step_size}"
+                f"-lkhd_blcks={args.num_lookahead_blocks}"
+                f"-lr={args.lr if args.lr is not None else 1.0/args.iters}"
+                f"-lr_scheduler={'none' if not args.enable_lr_scheduler else 'linear_decay'}"
+                f"-iters={args.iters}"
+                f"-nsamples={args.nsamples}"
+                f"-optimizer={'adam' if args.adam else 'signed_sgd'}"
+                f"-seed={args.seed}"
+            )
     else:
+        assert not args.round_to_nearest, "round_to_nearest is not supported in isolation_experiment_v2"
         run_name = (
             f"{model_name.split('/')[-1]}"
             f"-w{args.bits}g{args.group_size}"
@@ -370,8 +380,8 @@ if __name__ == '__main__':
         )
         
     model_name = args.model_name.rstrip("/")
-    autoround = round(model, tokenizer, model_name, args.bits, args.group_size, sym=args.sym, batch_size=args.train_bs,
-                      dataset=args.dataset, seqlen=seqlen, 
+    autoround = round(model, tokenizer, model_name, args.bits, args.group_size, sym=args.sym, round_to_nearest=args.round_to_nearest,
+                      batch_size=args.train_bs, dataset=args.dataset, seqlen=seqlen, 
                       nblocks=args.nblocks, block_step_size=args.block_step_size,
                       num_lookahead_blocks=args.num_lookahead_blocks, num_observe_blocks=args.num_observe_blocks,
                       cleanly_separated_lookahead=args.cleanly_separated_lookahead,
