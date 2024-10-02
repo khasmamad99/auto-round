@@ -17,6 +17,7 @@ import copy
 import time
 from typing import Optional, Union
 import os
+import glob
 import io
 import shutil
 
@@ -1561,6 +1562,12 @@ class AutoRound(object):
                             seed=self.eval_seed,
                         )    
                         print(eval_results)
+                        
+                        # delete model weights
+                        for file_path in glob.glob(os.path.join(self.model_save_dir, "*.safetensors")):
+                            os.remove(file_path)
+                        
+                        
 
         del q_input
         del input_ids
