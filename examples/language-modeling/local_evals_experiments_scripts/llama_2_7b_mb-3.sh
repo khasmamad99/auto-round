@@ -8,7 +8,7 @@ python3 main.py \
     --iters 1000 \
     --nblocks 3 \
     --num_lookahead_blocks 0 \
-    --block_step_size 1 \
+    --block_step_size 3 \
     --eval_after_each_optimization \
     --disable_eval \
     --wandb_project_name khas-thesis-local-evals
