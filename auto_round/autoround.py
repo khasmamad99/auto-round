@@ -1578,7 +1578,7 @@ class AutoRound(object):
                     if nblocks == block_step_size:
                         last_fully_fine_tuned_block_idx = fine_tune_block_indices.stop - 1
                         for i in range(len(input_ids)):
-                            if self.enable_quanted_input:
+                            if self.enable_quanted_input and quantized_last_fully_fine_tuned_block_output is not None:
                                 quantized_last_fully_fine_tuned_block_output[i] = None
                             unquantized_last_fully_fine_tuned_block_output[i] = None
                         del quantized_last_fully_fine_tuned_block_output
