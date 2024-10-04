@@ -1395,16 +1395,16 @@ class AutoRound(object):
                 cache_device=self.cache_device
             )
             fine_tune_block = mv_module_from_gpu(fine_tune_block, self.low_cpu_mem_usage)
-            for i in range(len(input_ids)):
-                input_ids[i] = None
-            torch.cuda.empty_cache()
+            # for i in range(len(input_ids)):
+            #     input_ids[i] = None
+            # torch.cuda.empty_cache()
 
             return q_outputs, fine_tune_block_outputs, mses_observe_block
 
         else:
-            for i in range(len(input_ids)):
-                input_ids[i] = None
-            torch.cuda.empty_cache()
+            # for i in range(len(input_ids)):
+                # input_ids[i] = None
+            # torch.cuda.empty_cache()
             return None, fine_tune_block_outputs, mses_observe_block
 
 
@@ -1502,13 +1502,44 @@ class AutoRound(object):
                     self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
                     torch.cuda.empty_cache()
         else:
+            
+            last_fully_fine_tuned_block_idx = -1
+            unquantized_last_fully_fine_tuned_block_output = input_ids
+            quantized_last_fully_fine_tuned_block_output = None
             for fine_tune_block_indices, attach_loss_block_indices, observe_block_indices in get_block_indices(
                 nblocks=nblocks, 
                 block_step_size=block_step_size, 
                 num_lookahead_blocks=num_lookahead_blocks, 
                 num_observe_blocks=num_observe_blocks,
                 total_num_blocks=len(block_names),
-            ):
+            ): 
+                    if fine_tune_block_indices.start > 0 and fine_tune_block_indices.start - 1 > last_fully_fine_tuned_block_idx:
+                        assert fine_tune_block_indices.start - last_fully_fine_tuned_block_idx == block_step_size + 1
+                        last_fully_fine_tuned_block_idx = fine_tune_block_indices.start - 1
+                        last_fine_tuned_multiblock_start_idx = fine_tune_block_indices.start - block_step_size
+                        last_fine_tuned_multiblock = WrapperMultiblock(
+                            [get_module(model, block_name) for block_name in block_names[last_fine_tuned_multiblock_start_idx: fine_tune_block_indices.start]]
+                        )
+                        last_fine_tuned_multiblock.to(device)
+                        if self.enable_quanted_input and quantized_last_fully_fine_tuned_block_output is not None:
+                            quantized_last_fully_fine_tuned_block_output = self.get_block_outputs(
+                                block=last_fine_tuned_multiblock,
+                                input_ids=quantized_last_fully_fine_tuned_block_output,
+                                input_others=input_others,
+                                bs=self.train_bs * self.infer_bs_coeff,
+                                device=device,
+                                cache_device=self.cache_device,
+                            )
+                        unquantized_last_fully_fine_tuned_block_output = self.get_block_outputs(
+                            block=last_fine_tuned_multiblock,
+                            input_ids=unquantized_last_fully_fine_tuned_block_output,
+                            input_others=input_others,
+                            bs=self.train_bs * self.infer_bs_coeff,
+                            device=device,
+                            cache_device=self.cache_device,
+                        )
+                            
+                    logger.info(f"last fully fine tuned block {last_fully_fine_tuned_block_idx}")
                     fine_tune_block_names = block_names[fine_tune_block_indices]
                     logger.info(f"fine tune block {fine_tune_block_names}")
                     fine_tune_block = WrapperMultiblock(
@@ -1536,15 +1567,34 @@ class AutoRound(object):
 
                     q_input, input_ids, _ = self.quant_block_with_lookahead(
                         combined_block,
-                        input_ids,
+                        unquantized_last_fully_fine_tuned_block_output,
                         input_others,
-                        q_input=q_input,
+                        q_input=quantized_last_fully_fine_tuned_block_output,
                         device=device,
                         fine_tune_block_name=format_layer_name(fine_tune_block_names if isinstance(fine_tune_block_names, str) else fine_tune_block_names[-1]),
                         attach_loss_block_name=format_layer_name(attach_loss_block_names if isinstance(attach_loss_block_names, str) else attach_loss_block_names[-1]),
                         observe_block_name=format_layer_name(observe_block_names if isinstance(observe_block_names, str) else observe_block_names[-1]),
                     )
-
+                    if nblocks == block_step_size:
+                        last_fully_fine_tuned_block_idx = fine_tune_block_indices.stop - 1
+                        for i in range(len(input_ids)):
+                            if self.enable_quanted_input:
+                                quantized_last_fully_fine_tuned_block_output[i] = None
+                            unquantized_last_fully_fine_tuned_block_output[i] = None
+                        del quantized_last_fully_fine_tuned_block_output
+                        del unquantized_last_fully_fine_tuned_block_output
+                        
+                        quantized_last_fully_fine_tuned_block_output = q_input
+                        unquantized_last_fully_fine_tuned_block_output = input_ids
+                    else:
+                        for i in range(len(input_ids)):
+                            if self.enable_quanted_input:
+                                q_input[i] = None
+                            input_ids[i] = None
+                        if q_input is not None:
+                            del q_input
+                        del input_ids
+                    
                     self.model = mv_module_from_gpu(self.model, self.low_cpu_mem_usage)
                     torch.cuda.empty_cache()
                     
@@ -1585,8 +1635,8 @@ class AutoRound(object):
                         
                         
 
-        del q_input
-        del input_ids
+        # del q_input
+        # del input_ids
         del input_others
         del inputs
 
