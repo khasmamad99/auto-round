@@ -1499,14 +1499,17 @@ class AutoRound(object):
                         assert fine_tune_block_indices.start - last_fully_fine_tuned_block_idx == block_step_size + 1
                         last_fully_fine_tuned_block_idx = fine_tune_block_indices.start - 1
                         last_fine_tuned_multiblock_start_idx = fine_tune_block_indices.start - block_step_size
+                        last_fine_tuned_block_names = block_names[last_fine_tuned_multiblock_start_idx: fine_tune_block_indices.start]
                         last_fine_tuned_multiblock = WrapperMultiblock(
-                            [get_module(model, block_name) for block_name in block_names[last_fine_tuned_multiblock_start_idx: fine_tune_block_indices.start]]
+                            [get_module(model, block_name) for block_name in last_fine_tuned_block_names]
                         )
                         last_fine_tuned_multiblock.to(device)
-                        if self.enable_quanted_input and quantized_last_fully_fine_tuned_block_output is not None:
+                        logger.info(f"last fine tuned multiblock {last_fine_tuned_block_names}")
+                        if self.enable_quanted_input:
+                            input_ids = unquantized_last_fully_fine_tuned_block_output if last_fine_tuned_multiblock_start_idx == 0 else quantized_last_fully_fine_tuned_block_output
                             quantized_last_fully_fine_tuned_block_output = self.get_block_outputs(
                                 block=last_fine_tuned_multiblock,
-                                input_ids=quantized_last_fully_fine_tuned_block_output,
+                                input_ids=input_ids,
                                 input_others=input_others,
                                 bs=self.train_bs * self.infer_bs_coeff,
                                 device=device,
@@ -1557,6 +1560,7 @@ class AutoRound(object):
                         attach_loss_block_name=format_layer_name(attach_loss_block_names if isinstance(attach_loss_block_names, str) else attach_loss_block_names[-1]),
                         observe_block_name=format_layer_name(observe_block_names if isinstance(observe_block_names, str) else observe_block_names[-1]),
                     )
+                    
                     if nblocks == block_step_size:
                         last_fully_fine_tuned_block_idx = fine_tune_block_indices.stop - 1
                         for i in range(len(input_ids)):
