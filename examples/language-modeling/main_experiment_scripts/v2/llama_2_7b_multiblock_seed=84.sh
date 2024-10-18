@@ -10,7 +10,7 @@ python3 main.py \
     --block_step_size 2 \
     --num_lookahead_blocks 0 \
     --wandb_project_name khas-thesis-main \
-    --seed 1
+    --seed 84
 
 python3 main.py \
     --model_name meta-llama/llama-2-7b-hf  \
@@ -24,7 +24,7 @@ python3 main.py \
     --block_step_size 3 \
     --num_lookahead_blocks 0 \
     --wandb_project_name khas-thesis-main \
-    --seed 1
+    --seed 84
 
 python3 main.py \
     --model_name meta-llama/llama-2-7b-hf  \
@@ -38,7 +38,7 @@ python3 main.py \
     --block_step_size 4 \
     --num_lookahead_blocks 0 \
     --wandb_project_name khas-thesis-main \
-    --seed 1
+    --seed 84
 
 # python3 main.py \
 #     --model_name meta-llama/llama-2-7b-hf  \

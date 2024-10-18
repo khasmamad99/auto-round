@@ -607,12 +607,12 @@ class AutoRound(object):
             dataset = self.dataset.replace(" ", "")  ##remove all whitespaces
             # slow here
             self.dataloader = get_dataloader(
-                self.tokenizer,
-                self.seqlen,
-                dataset,
-                self.seed,
-                bs,
-                self.nsamples,
+                tokenizer=self.tokenizer,
+                seqlen=self.seqlen,
+                dataset_name=dataset,
+                seed=42,
+                bs=bs,
+                nsamples=self.nsamples,
             )
         else:
             self.dataloader = self.dataset
@@ -929,12 +929,10 @@ class AutoRound(object):
         pick_samples = train_bs * gradient_accumulate_steps
 
         if self.sampler != "rand":
-            torch.manual_seed(self.seed)
             whole_indices = torch.randperm(nsamples)[:pick_samples]
         for i in range(self.iters):
             total_loss = 0
             if self.sampler == "rand":
-                torch.manual_seed(i)
                 whole_indices = torch.randperm(nsamples)[:pick_samples]
             for tmp_step in range(gradient_accumulate_steps):
                 indices = whole_indices[tmp_step * train_bs: (tmp_step + 1) * train_bs]
@@ -1049,7 +1047,6 @@ class AutoRound(object):
         pick_samples = self.train_bs * self.gradient_accumulate_steps
         nsamples = len(input_ids)
         if self.sampler != "rand":
-            torch.manual_seed(self.seed)
             whole_indices = torch.randperm(nsamples)[:pick_samples]
         last_best_iter = 0
         best_loss = torch.finfo(torch.float).max
@@ -1060,7 +1057,6 @@ class AutoRound(object):
         for i in range(self.iters):
             total_loss = 0
             if self.sampler == "rand":
-                torch.manual_seed(i)
                 whole_indices = torch.randperm(nsamples)[:pick_samples]
             for tmp_step in range(self.gradient_accumulate_steps):
                 indices = whole_indices[tmp_step * self.train_bs: (tmp_step + 1) * self.train_bs]
@@ -1238,7 +1234,6 @@ class AutoRound(object):
         pick_samples = self.train_bs * self.gradient_accumulate_steps
         nsamples = len(input_ids)
         if self.sampler != "rand":
-            torch.manual_seed(self.seed)
             whole_indices = torch.randperm(nsamples)[:pick_samples]
         last_best_iter = 0
         best_loss = torch.finfo(torch.float).max
@@ -1267,7 +1262,6 @@ class AutoRound(object):
             total_attach_loss_block_mse = 0
             total_observe_block_mse = 0
             if self.sampler == "rand":
-                torch.manual_seed(i)
                 whole_indices = torch.randperm(nsamples)[:pick_samples]
             for tmp_step in range(self.gradient_accumulate_steps):
                 indices = whole_indices[tmp_step * self.train_bs: (tmp_step + 1) * self.train_bs]
@@ -1512,13 +1506,16 @@ class AutoRound(object):
             last_fully_fine_tuned_block_idx = -1
             unquantized_last_fully_fine_tuned_block_output = input_ids
             quantized_last_fully_fine_tuned_block_output = None
-            for fine_tune_block_indices, attach_loss_block_indices, observe_block_indices in get_block_indices(
-                nblocks=nblocks, 
-                block_step_size=block_step_size, 
-                num_lookahead_blocks=num_lookahead_blocks, 
-                num_observe_blocks=num_observe_blocks,
-                total_num_blocks=len(block_names),
+            for idx_for_seed, (fine_tune_block_indices, attach_loss_block_indices, observe_block_indices) in enumerate(
+                get_block_indices(
+                    nblocks=nblocks, 
+                    block_step_size=block_step_size, 
+                    num_lookahead_blocks=num_lookahead_blocks, 
+                    num_observe_blocks=num_observe_blocks,
+                    total_num_blocks=len(block_names),
+                )
             ): 
+                    transformers.set_seed(self.seed + idx_for_seed)  # we set a new seed for each block to keep things reproducible
                     if fine_tune_block_indices.start > 0 and fine_tune_block_indices.start - 1 > last_fully_fine_tuned_block_idx:
                         assert fine_tune_block_indices.start - last_fully_fine_tuned_block_idx == block_step_size + 1
                         last_fully_fine_tuned_block_idx = fine_tune_block_indices.start - 1
