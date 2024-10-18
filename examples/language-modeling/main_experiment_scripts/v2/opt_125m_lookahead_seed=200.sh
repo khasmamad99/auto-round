@@ -8,7 +8,7 @@ python3 main.py \
     --iters 1000 \
     --nblocks 1 \
     --block_step_size 1 \
-    --num_lookahead_blocks \
+    --num_lookahead_blocks 0 \
     --wandb_project_name khas-thesis-main \
     --seed 200 &
 
