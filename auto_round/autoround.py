@@ -929,10 +929,12 @@ class AutoRound(object):
         pick_samples = train_bs * gradient_accumulate_steps
 
         if self.sampler != "rand":
+            torch.manual_seed(self.seed)
             whole_indices = torch.randperm(nsamples)[:pick_samples]
         for i in range(self.iters):
             total_loss = 0
             if self.sampler == "rand":
+                torch.manual_seed(i)
                 whole_indices = torch.randperm(nsamples)[:pick_samples]
             for tmp_step in range(gradient_accumulate_steps):
                 indices = whole_indices[tmp_step * train_bs: (tmp_step + 1) * train_bs]
@@ -1047,6 +1049,7 @@ class AutoRound(object):
         pick_samples = self.train_bs * self.gradient_accumulate_steps
         nsamples = len(input_ids)
         if self.sampler != "rand":
+            torch.manual_seed(self.seed)
             whole_indices = torch.randperm(nsamples)[:pick_samples]
         last_best_iter = 0
         best_loss = torch.finfo(torch.float).max
@@ -1057,6 +1060,7 @@ class AutoRound(object):
         for i in range(self.iters):
             total_loss = 0
             if self.sampler == "rand":
+                torch.manual_seed(i)
                 whole_indices = torch.randperm(nsamples)[:pick_samples]
             for tmp_step in range(self.gradient_accumulate_steps):
                 indices = whole_indices[tmp_step * self.train_bs: (tmp_step + 1) * self.train_bs]
@@ -1234,6 +1238,7 @@ class AutoRound(object):
         pick_samples = self.train_bs * self.gradient_accumulate_steps
         nsamples = len(input_ids)
         if self.sampler != "rand":
+            torch.manual_seed(self.seed)
             whole_indices = torch.randperm(nsamples)[:pick_samples]
         last_best_iter = 0
         best_loss = torch.finfo(torch.float).max
@@ -1262,6 +1267,7 @@ class AutoRound(object):
             total_attach_loss_block_mse = 0
             total_observe_block_mse = 0
             if self.sampler == "rand":
+                torch.manual_seed(i)
                 whole_indices = torch.randperm(nsamples)[:pick_samples]
             for tmp_step in range(self.gradient_accumulate_steps):
                 indices = whole_indices[tmp_step * self.train_bs: (tmp_step + 1) * self.train_bs]
