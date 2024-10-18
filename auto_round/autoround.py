@@ -592,12 +592,12 @@ class AutoRound(object):
             dataset = self.dataset.replace(" ", "")  ##remove all whitespaces
             # slow here
             self.dataloader = get_dataloader(
-                self.tokenizer,
-                self.seqlen,
-                dataset,
-                self.seed,
-                bs,
-                self.nsamples,
+                tokenizer=self.tokenizer,
+                seqlen=self.seqlen,
+                dataset_name=dataset,
+                seed=42,
+                bs=bs,
+                nsamples=self.nsamples,
             )
         else:
             self.dataloader = self.dataset
