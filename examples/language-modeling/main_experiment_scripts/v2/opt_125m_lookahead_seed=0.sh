@@ -185,3 +185,18 @@ python3 main.py \
     --num_lookahead_blocks 11 \
     --wandb_project_name khas-thesis-main \
     --seed 0 \
+
+
+python3 main.py \
+    --model_name facebook/opt-125m  \
+    --bits 4 \
+    --group_size 128 \
+    --eval_bs 32 \
+    --enable_lr_scheduler \
+    --nsamples 64 \
+    --iters 20 \
+    --nblocks 1 \
+    --block_step_size 1 \
+    --num_lookahead_blocks 0 \
+    --wandb_project_name khas-thesis-main \
+    --seed 0 --disable_wandb --tasks wikitext
