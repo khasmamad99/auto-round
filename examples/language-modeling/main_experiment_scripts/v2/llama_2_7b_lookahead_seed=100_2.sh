@@ -1,6 +1,6 @@
 # python3 main.py \
 #     --model_name meta-llama/llama-2-7b-hf  \
-#     --bits 3 \
+#     --bits 4 \
 #     --group_size 128 \
 #     --eval_bs 32 \
 #     --lr 1e-3 \
@@ -15,7 +15,7 @@
 
 # python3 main.py \
 #     --model_name meta-llama/llama-2-7b-hf  \
-#     --bits 3 \
+#     --bits 4 \
 #     --group_size 128 \
 #     --eval_bs 32 \
 #     --enable_lr_scheduler \
@@ -29,7 +29,7 @@
 
 python3 main.py \
     --model_name meta-llama/llama-2-7b-hf  \
-    --bits 3 \
+    --bits 4 \
     --group_size 128 \
     --eval_bs 32 \
     --enable_lr_scheduler \
@@ -43,7 +43,7 @@ python3 main.py \
 
 python3 main.py \
     --model_name meta-llama/llama-2-7b-hf  \
-    --bits 3 \
+    --bits 4 \
     --group_size 128 \
     --eval_bs 32 \
     --enable_lr_scheduler \
