@@ -1515,7 +1515,7 @@ class AutoRound(object):
                     total_num_blocks=len(block_names),
                 )
             ): 
-                    transformers.set_seed(self.seed + idx_for_seed)  # we set a new seed for each block to keep things reproducible
+                    torch.manual_seed(self.seed + idx_for_seed)  # we set a new seed for each block to keep things reproducible
                     if fine_tune_block_indices.start > 0 and fine_tune_block_indices.start - 1 > last_fully_fine_tuned_block_idx:
                         assert fine_tune_block_indices.start - last_fully_fine_tuned_block_idx == block_step_size + 1
                         last_fully_fine_tuned_block_idx = fine_tune_block_indices.start - 1
