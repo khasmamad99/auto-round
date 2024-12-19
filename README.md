@@ -1,5 +1,3 @@
-<div align="center">
-
 Lookahead-PTQ
 ===========================
 This is built on [auto-round](https://github.com/intel/auto-round). See `original_README.md`.
@@ -17,8 +15,6 @@ pip install -vvv --no-build-isolation -e .
 or
 pip install -r requirements.txt
 python setup.py install
-
-
 ```
 
 ### Install from pypi
